@@ -1,0 +1,13 @@
+enonce.pdf
+*.o
+client
+librarie
+nil
+.vscode*
+*.aux
+*.log
+*.fls
+*.fdb_latexmk
+*.out
+*.gz
+rapport.pdf
