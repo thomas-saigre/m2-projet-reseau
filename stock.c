@@ -21,6 +21,11 @@ void init_stock(int n, char *argv[], struct stock *st)
     st->livres = (char *) calloc(n * TITRE_S, sizeof(char));
     st->disp = (int *) malloc(n * sizeof(int));
 
+    if (st->livres == NULL || st->disp == NULL)
+    {
+        raler(0, "erreur malloc");
+    }
+
     for (int i=0; i<n; ++i)
     {
         int n_ecrits = snprintf(&st->livres[i*TITRE_S], TITRE_S, "%s", argv[i]);
