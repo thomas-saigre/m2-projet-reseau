@@ -37,8 +37,10 @@ void raler_log (char *msg)
  * @param an structure contenant les adresses et les ports des librairies
  * @param dg datagramme à envoyer
  * @param n taille du datagramme
+ * @param sockarray tableau qui contiendra les descripteurs des sockets
  */
-void brodcast_command(const struct annuaire an, const char *dg, const int len)
+void brodcast_command(const struct annuaire an, const char *dg, const int len,
+        int *sockarray)
 {
     for (int l=0; l<an.nlib; ++l)
     {
@@ -78,7 +80,43 @@ void brodcast_command(const struct annuaire an, const char *dg, const int len)
         r = sendto(s, dg, len, 0, (struct sockaddr *) &sadr, salong);
         if (r == -1) raler(1, "send to");
 
-        close(s);
+        // close(s);
+        sockarray[l] = s; 
+    }
+}
+
+
+
+void ecouter_reponse(const struct annuaire an, const int *sockarray)
+{
+    for (int l=0; l<an.nlib; ++l)
+    {
+        // réception du datagramme
+        struct sockaddr_storage sonadr;
+        socklen_t salong;
+        int r, af;
+        void *nadr;			/* au format network */
+        char padr[INET6_ADDRSTRLEN];	/* au format presentation */
+        char buf[MAXLEN];
+
+        salong = sizeof sonadr;
+        r = recvfrom(sockarray[l], buf, MAXLEN, 0,
+                     (struct sockaddr *) &sonadr, &salong);
+        af = ((struct sockaddr *) &sonadr)->sa_family;
+
+        switch (af)
+        {
+            case AF_INET:
+                nadr = & ((struct sockaddr_in *) &sonadr)->sin_addr ;
+                break ;
+            case AF_INET6 :
+                nadr = & ((struct sockaddr_in6 *) &sonadr)->sin6_addr ;
+                break ;
+        }
+        inet_ntop(af, nadr, padr, sizeof padr);
+        printf ("Réponse :\n");
+        printf ("%s: nb d'octets lus = %d\n", padr, r);
+        printf ("    message lu : %s\n", buf);
     }
 }
 
@@ -124,10 +162,14 @@ void serveur(int in, const uint32_t no_commande, const struct annuaire an)
         ind_buf += TITRE_S;
     }
 
-    brodcast_command(an, dg, taille_dg);
+    int *sockarray = malloc(an.nlib * sizeof(int));
+
+    brodcast_command(an, dg, taille_dg, sockarray);
+
+    ecouter_reponse(an, sockarray);
 
 
-
+    free(sockarray);
 }
 
 

@@ -50,6 +50,17 @@ int reserver_livre(const char *titre, struct stock *st)
             break;
         }
     }
-    printf("%s %d\n", titre, ind);
+    return ind;
+}
+
+int est_disponible(const char *titre, const struct stock *st)
+{
+    int ind = -1;
+    for (int i=0; i<st->n; ++i)
+    if ((strcmp(&st->livres[i*TITRE_S], titre) == 0) && st->disp[i])
+        {
+            ind = i;
+            break;
+        }
     return ind;
 }

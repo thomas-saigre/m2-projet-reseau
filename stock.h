@@ -33,4 +33,12 @@ void free_stock(struct stock *st);
 int reserver_livre(const char *titre, struct stock *st);
 
 
+/**
+ * @brief renvoie la référence du livre dans le sotck (-1 sinon)
+ *
+ * @param titre référence du livre
+ * @result indice du livre
+ */
+int est_disponible(const char *titre, const struct stock *st);
+
 #endif

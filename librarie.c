@@ -11,6 +11,8 @@
 #include "raler.h"
 
 #define TITRE_S     10
+#define ID_S        4
+#define NB_S        2
 #define MAXSOSK     32
 #define MAXLEN      1024
 
@@ -23,8 +25,9 @@ void usage (char *argv0)
 
 
 
-void traiter_commande(int s)
+void traiter_commande(int s, struct stock *lib)
 {
+    // réception du datagramme
     struct sockaddr_storage sonadr ;
     socklen_t salong ;
     int r, af ;
@@ -46,8 +49,47 @@ void traiter_commande(int s)
             break ;
     }
     inet_ntop(af, nadr, padr, sizeof padr);
-    printf ("%s: nb d'octets lus = %d\n", padr, r) ;
-    printf ("    message lu : %s\n", buf) ;
+    printf ("%s: nb d'octets lus = %d\n", padr, r);
+    printf ("    message lu : %s\n", buf);
+
+    u_int32_t no_commande = *(u_int32_t *) buf;
+    u_int16_t nb_livre = ntohs(*(u_int16_t *) &buf[4]);
+
+
+
+    // Création du datagramme à renvoyer à la librairie
+
+    int ind = 6, n_dispo = 0, ind_livre;
+    char dg_send[MAXLEN];
+
+    // déjà en network byte order
+    *(u_int32_t *) dg_send = no_commande;
+    // on mettra le nombre de livres à la fin
+
+    for (int i=0; i<nb_livre; ++i)
+    {
+        char titre[TITRE_S + 1];
+        for (int s=0; s<TITRE_S; ++s)
+            titre[s] = buf[ind + s];
+        titre[TITRE_S] = '\0';
+        // snprintf(titre, TITRE_S + 1, "%s", &buf[ind]);
+        ind_livre = est_disponible(titre, lib);
+
+        if (ind_livre != -1)
+        {
+            n_dispo++;
+            snprintf(&dg_send[ind], TITRE_S,
+                         "%s", &lib->livres[ind_livre * TITRE_S]);
+        }
+        ind += TITRE_S;
+    }
+    *(uint16_t *) &dg_send[ID_S] = htons(n_dispo);
+
+
+    // Envoi du datagramme
+    int taille_dg = ID_S + NB_S + n_dispo*TITRE_S;
+    r = sendto(s, dg_send, taille_dg, 0, (struct sockaddr *) &sonadr, salong);
+    if (r == -1) raler(1, "sendto");
 }
 
 
@@ -119,7 +161,7 @@ int main(int argc, char *argv[])
         for (i=0; i<nsock; ++i)
         {
             if (FD_ISSET(s[i], &readfds))
-                traiter_commande(s[i]);
+                traiter_commande(s[i], &lib);
         }
     }
 
