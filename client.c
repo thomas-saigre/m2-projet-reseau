@@ -32,7 +32,7 @@ void envoyer_requete(const char *serveur, const char *port,
     const int taile_dg = 2 + n*TITRE_S;
     char *datagramme = calloc(taile_dg, sizeof(char));
 
-    *(uint16_t *) datagramme = n;
+    *(uint16_t *) datagramme = htons(n);
     int i_dg = 2;
     for (int i=0; i<n; ++i)
     {
@@ -41,7 +41,9 @@ void envoyer_requete(const char *serveur, const char *port,
         i_dg += TITRE_S;
     }
 
+
     struct addrinfo hints, *res, *res0 ;
+    memset(&hints, 0, sizeof hints);
     hints.ai_family = PF_UNSPEC ;
     hints.ai_socktype = SOCK_STREAM ;
 
@@ -69,11 +71,12 @@ void envoyer_requete(const char *serveur, const char *port,
     if (s == -1) raler(0, "Erreur : %s", cause);
     freeaddrinfo(res0);
     
-    printf("Envoi requête à %s/%s", serveur, port);
+    printf("Envoi requête à %s/%s\n", serveur, port);
     err = write(s, datagramme, taile_dg);
     if (err == -1) raler(1, "Échec envoi requête");
 
     close(s);
+
 
     free(datagramme);
 }
