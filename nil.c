@@ -11,12 +11,19 @@
 #include <syslog.h>
 #include "raler.h"
 #include "annuaire.h"
+#include "repertoire.h"
+#include <pthread.h>
 
-#define TITRE_S 10
-#define ID_S    4
-#define NB_S    2
-#define MAXSOCK 32
-#define MAXLEN  1024
+#define TITRE_S         10
+#define ID_S            4
+#define NB_S            2
+#define MAXSOCK         32
+#define MAXLEN          1024
+#define INIT_COMMANDE   128
+
+#define CHK(v) do{if((v)==-1)raler(1,#v);} while(0)
+
+time_t delai;
 
 void usage (char *argv0)
 {
@@ -31,92 +38,110 @@ void raler_log (char *msg)
 }
 
 
+
+
+
 /**
- * @brief Envoie le datagramme de la commande à toutes les libraries
+ * @brief gère l'envoi et la réception des données avec les librairies
  * 
- * @param an structure contenant les adresses et les ports des librairies
+ * @param an annuaire des librairies
  * @param dg datagramme à envoyer
- * @param n taille du datagramme
- * @param sockarray tableau qui contiendra les descripteurs des sockets
+ * @param len taille du datagramme
+ * @param desc_tube descripteur de l'entrée du tube où écrire les réponses
  */
-void brodcast_command(const struct annuaire an, const char *dg, const int len,
-        int *sockarray)
+void diag_lib(const struct annuaire an, const char *dg, const int len,
+              const int desc_tube)
 {
     for (int l=0; l<an.nlib; ++l)
     {
+        // pour l'envoi
         struct sockaddr_storage sadr;
         struct sockaddr_in  *sadr4 = (struct sockaddr_in  *) &sadr;
         struct sockaddr_in6 *sadr6 = (struct sockaddr_in6 *) &sadr;
         socklen_t salong;
         int s, r, family, o;
 
-        memset (&sadr, 0, sizeof sadr);
-        int port = htons(an.ports[l]);
-
-        if (inet_pton(AF_INET6, an.librairies[l], &sadr6->sin6_addr) == 1)
-        {
-            family = PF_INET6;
-            sadr6->sin6_family = AF_INET6;
-            sadr6->sin6_port = port;
-            salong = sizeof *sadr6;
-        }
-        else if (inet_pton(AF_INET6, an.librairies[l], &sadr4->sin_addr) == 1)
-        {
-            family = PF_INET ;
-            sadr4->sin_family = AF_INET;
-            sadr4->sin_port = port;
-            salong = sizeof *sadr4;
-        }
-        else
-            raler(0, "adresse '%s' non reconnue\n", an.librairies[l]);
-
-        s = socket(family, SOCK_DGRAM, 0);
-        if (s==-1) raler(0, "socket");
-
-        o = 1;
-        setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
-
-        printf("Envoi à la librairie %d\n", l);
-        r = sendto(s, dg, len, 0, (struct sockaddr *) &sadr, salong);
-        if (r == -1) raler(1, "send to");
-
-        // close(s);
-        sockarray[l] = s; 
-    }
-}
-
-
-
-void ecouter_reponse(const struct annuaire an, const int *sockarray)
-{
-    for (int l=0; l<an.nlib; ++l)
-    {
-        // réception du datagramme
+        // pour la réception
         struct sockaddr_storage sonadr;
-        socklen_t salong;
-        int r, af;
+        int af;
         void *nadr;			/* au format network */
         char padr[INET6_ADDRSTRLEN];	/* au format presentation */
         char buf[MAXLEN];
+        // pour que le père sache de quelle librairie la réponse viendra,
+        // on place son indice en tête du message entré dans le tube
+        *(uint16_t *) buf = l;
 
-        salong = sizeof sonadr;
-        r = recvfrom(sockarray[l], buf, MAXLEN, 0,
-                     (struct sockaddr *) &sonadr, &salong);
-        af = ((struct sockaddr *) &sonadr)->sa_family;
-
-        switch (af)
+        switch (fork())
         {
-            case AF_INET:
-                nadr = & ((struct sockaddr_in *) &sonadr)->sin_addr ;
-                break ;
-            case AF_INET6 :
-                nadr = & ((struct sockaddr_in6 *) &sonadr)->sin6_addr ;
-                break ;
+        case -1:
+            raler(1, "Erreur fork");
+            break;
+        
+        case 0:
+            // Envoi du datagramme à la librarie l
+
+            memset (&sadr, 0, sizeof sadr);
+            int port = htons(an.ports[l]);
+
+            if (inet_pton(AF_INET6, an.librairies[l], &sadr6->sin6_addr) == 1)
+            {
+                family = PF_INET6;
+                sadr6->sin6_family = AF_INET6;
+                sadr6->sin6_port = port;
+                salong = sizeof *sadr6;
+            }
+            else if (inet_pton(AF_INET6, an.librairies[l], &sadr4->sin_addr) == 1)
+            {
+                family = PF_INET ;
+                sadr4->sin_family = AF_INET;
+                sadr4->sin_port = port;
+                salong = sizeof *sadr4;
+            }
+            else
+                raler(0, "adresse '%s' non reconnue\n", an.librairies[l]);
+
+            s = socket(family, SOCK_DGRAM, 0);
+            if (s==-1) raler(0, "socket");
+
+            o = 1;
+            setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
+
+            printf("Envoi à la librairie %d\n", l);
+            r = sendto(s, dg, len, 0, (struct sockaddr *) &sadr, salong);
+            if (r == -1) raler(1, "send to");
+
+
+            // puis attente de la réponse
+            // réception du datagramme
+
+            salong = sizeof sonadr;
+            r = recvfrom(s, &buf[2], MAXLEN-2, 0,
+                        (struct sockaddr *) &sonadr, &salong);
+            af = ((struct sockaddr *) &sonadr)->sa_family;
+
+            switch (af)
+            {
+                case AF_INET:
+                    nadr = & ((struct sockaddr_in *) &sonadr)->sin_addr ;
+                    break ;
+                case AF_INET6 :
+                    nadr = & ((struct sockaddr_in6 *) &sonadr)->sin6_addr ;
+                    break ;
+            }
+            inet_ntop(af, nadr, padr, sizeof padr);
+            printf ("Réponse :\n");
+            printf ("%s: nb d'octets lus = %d\n", padr, r);
+
+            // envoie de la réponse vers le processus père, via le tube
+            CHK(write(desc_tube, buf, r));
+            close(s);
+            break;
+        
+        default:
+            CHK(close(desc_tube));
+            break;
         }
-        inet_ntop(af, nadr, padr, sizeof padr);
-        printf ("Réponse :\n");
-        printf ("%s: nb d'octets lus = %d\n", padr, r);
-        printf ("    message lu : %s\n", buf);
+        
     }
 }
 
@@ -124,8 +149,16 @@ void ecouter_reponse(const struct annuaire an, const int *sockarray)
 
 
 
-
-void serveur(int in, const uint32_t no_commande, const struct annuaire an)
+/**
+ * @brief Prépare les données à envoyer aux librairies
+ * 
+ * @param in
+ * @param no_commande numéro de commande
+ * @param an annuaire des librairies
+ * @param desc_tube descripteur de l'entrée du tube où écrire les réponses
+ */
+void serveur(int in, const uint32_t no_commande, const struct annuaire an,
+             const int desc_tube)
 {
     int r, n = 0;
     char buf[MAXLEN];
@@ -162,18 +195,23 @@ void serveur(int in, const uint32_t no_commande, const struct annuaire an)
         ind_buf += TITRE_S;
     }
 
-    int *sockarray = malloc(an.nlib * sizeof(int));
-
-    brodcast_command(an, dg, taille_dg, sockarray);
-
-    ecouter_reponse(an, sockarray);
+    diag_lib(an, dg, taille_dg, desc_tube);
 
 
-    free(sockarray);
+    
+    
 }
 
-
-void demon(char *serv, const struct annuaire an)
+/**
+ * @brief Met en place le serveur UDP de nil
+ * 
+ * @param serv
+ * @param an annuaire des librairies
+ * @param tube [2] descripteurs du tube
+ * @param reo adresse du répertoire des commandes
+ */
+void demon(char *serv, const struct annuaire an,
+           const int tube[2], struct repertoire *rep)
 {
     int s[MAXSOCK], sd, nsock, r, opt = 1;
     struct addrinfo hints, *res, *res0;
@@ -216,6 +254,8 @@ void demon(char *serv, const struct annuaire an)
     if (nsock == 0) raler_log(cause);
     freeaddrinfo(res0);
 
+    uint32_t no_commande = 0;
+    // struct repertoire rp;
 
     for (;;)
     {
@@ -233,7 +273,6 @@ void demon(char *serv, const struct annuaire an)
         if (select(max+1, &readfds, NULL, NULL, NULL) == -1)
             raler_log("select");
 
-        uint32_t no_commande = 0;
 
         for (i=0; i<nsock; ++i)
         {
@@ -251,14 +290,55 @@ void demon(char *serv, const struct annuaire an)
                     raler(1, "fork");
                     break;
                 case 0:
-                    serveur(sd, no_commande, an);
+                    CHK(close(tube[0]));
+                    serveur(sd, no_commande, an, tube[1]);
+                    CHK(close(tube[1]));
                     exit(0);
                 default:
-                    close(sd);
+                    CHK(close(tube[0]));
+                    ajouter_commande(no_commande, sd, rep);
+                    // close(sd);
                     break;
                 }
             }
         }
+    }
+}
+
+
+
+struct reponse
+{
+    struct annuaire *an;
+    int desc;
+};
+
+void *reponses_lib(void *ent)
+{
+    struct reponse *rep = (struct reponse *) ent;
+    int nlus;
+    char buf[MAXLEN];
+    int ind = 0;
+    for (;;)
+    {
+        CHK(nlus = read(rep->desc, buf, MAXLEN));
+        // début du datagramme reçu : LLCCCCNN...
+        // le vrai dg est               ******...
+        uint16_t ind_lib = *(uint16_t *) buf;
+        uint32_t no_commande = *(uint32_t *) &buf[2];
+        uint16_t nb_livres = ntohs(*(uint16_t *) &buf[6]);
+
+        char *dg_retour = calloc(NB_S + 29*nb_livres, sizeof(char));
+
+        *(uint16_t *) dg_retour = htons(nb_livres);
+        for (lint)
+        
+        // si on a lu le début d'une autre commande, on la place au début
+        if (ID_S + NB_S + nb_livres*TITRE_S != nlus)
+        {
+            memmove(buf, &buf[nlus], MAXLEN-nlus);
+        }
+        free(dg_retour);
     }
 }
 
@@ -271,7 +351,7 @@ int main(int argc, char *argv[])
     char *serv;
     if (argc < 3) usage(argv[0]);
     serv = argv[1];
-    (void) serv;
+    delai = (time_t) atoi(argv[2]);
 
 
 
@@ -286,18 +366,18 @@ int main(int argc, char *argv[])
     init_annuaire(nlib, &argv[3], &an);
 
 
-    // for (int i=0; i<an.nlib; ++i)
-    //     printf("%s : %d\n", an.librairies[i], an.ports[i]);
+    struct repertoire rep;
+    init_repertoire(INIT_COMMANDE, &rep);
 
-    // char *dg;
-    // dg = "thomas";
-    // brodcast_command(an, dg, 6);
+    // tube qui gère librairie -> père
+    int tube[2];
+    CHK(pipe(tube));
 
     setsid();   // nouvelle session
     chdir("/"); // change le répertoir courant
     umask(0);   // initialise le masque binaire
     openlog("exemple", LOG_PID | LOG_CONS, LOG_DAEMON);
-    demon(serv, an);
+    demon(serv, an, tube, &rep);
     exit(1);
 
 

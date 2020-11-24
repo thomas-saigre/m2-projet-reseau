@@ -50,14 +50,13 @@ void traiter_commande(int s, struct stock *lib)
     }
     inet_ntop(af, nadr, padr, sizeof padr);
     printf ("%s: nb d'octets lus = %d\n", padr, r);
-    printf ("    message lu : %s\n", buf);
 
     u_int32_t no_commande = *(u_int32_t *) buf;
     u_int16_t nb_livre = ntohs(*(u_int16_t *) &buf[4]);
 
 
 
-    // Création du datagramme à renvoyer à la librairie
+    // Création du datagramme à renvoyer au serveur
 
     int ind = 6, n_dispo = 0, ind_livre;
     char dg_send[MAXLEN];

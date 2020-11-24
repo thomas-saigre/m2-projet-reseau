@@ -16,8 +16,8 @@ debug: all
 librarie: librarie.o stock.o raler.o
 	$(CC) librarie.o stock.o raler.o -o librarie
 
-nil: nil.o raler.o annuaire.o
-	$(CC) nil.o raler.o annuaire.o -o nil
+nil: nil.o raler.o annuaire.o repertoire.o
+	$(CC) nil.o raler.o annuaire.o repertoire.o -o nil
 
 client: client.o raler.o
 	$(CC) client.o raler.o -o client
@@ -29,6 +29,9 @@ nil.o: nil.c
 
 annuaire.o: annuaire.c
 	$(CC) annuaire.c $(CFLAGS) $(DEBUG)
+
+repertoire.o: repertoire.c
+	$(CC) repertoire.c $(CFLAGS) $(DEBUG)
 
 client.o: client.c
 	$(CC) client.c $(CFLAGS) $(DEBUG)
