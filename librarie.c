@@ -56,14 +56,15 @@ void traiter_commande(int s, struct stock *lib)
 
 
 
-    // Création du datagramme à renvoyer au serveur
+    // Création du datagramme à renvoyer au serveur nil
 
     int ind = 6, n_dispo = 0, ind_livre;
     char dg_send[MAXLEN];
+    memset(dg_send, 0, MAXLEN);
 
     // déjà en network byte order
     *(u_int32_t *) dg_send = no_commande;
-    // on mettra le nombre de livres à la fin
+    // on mettra le nombre de livres dans le dg à la fin
 
     for (int i=0; i<nb_livre; ++i)
     {
@@ -76,12 +77,19 @@ void traiter_commande(int s, struct stock *lib)
 
         if (ind_livre != -1)
         {
+            printf("%s disponible !\n", &lib->livres[ind_livre * TITRE_S]);
             n_dispo++;
             snprintf(&dg_send[ind], TITRE_S,
-                         "%s", &lib->livres[ind_livre * TITRE_S]);
+                     "%s", &lib->livres[ind_livre * TITRE_S]);
         }
+        else
+        {
+            printf("%s non disponible\n", titre);
+        }
+        
         ind += TITRE_S;
     }
+    // on complmète le dg en ajoutant le nombre de livres
     *(uint16_t *) &dg_send[ID_S] = htons(n_dispo);
 
 
@@ -95,12 +103,14 @@ void traiter_commande(int s, struct stock *lib)
 
 int main(int argc, char *argv[])
 {
+    // gestion des arguments : mise en place du stock
     if (argc < 2) usage(argv[0]);
     
     int nb_livres = argc - 2;
     struct stock lib;
     init_stock(nb_livres, &argv[2], &lib);
 
+    // ouverture du serveur UDP, en attente des envois de Nil
     int s[MAXSOSK], nsock, r;
     struct addrinfo hints, *res, *res0 ;
     char *cause;
@@ -117,6 +127,7 @@ int main(int argc, char *argv[])
         raler(0, "geteddrinfo: %s\n", gai_strerror(r));
     }
 
+    // ouverture des sockets
     nsock = 0;
     for (res=res0; res && nsock<MAXSOSK; res=res->ai_next)
     {

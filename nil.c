@@ -12,14 +12,14 @@
 #include "raler.h"
 #include "annuaire.h"
 #include "repertoire.h"
-#include <pthread.h>
+#include <sys/time.h>
 
 #define TITRE_S         10
 #define ID_S            4
 #define NB_S            2
-#define MAXSOCK         32
+#define REPONSE_S       29
+#define MAXSOCK         64
 #define MAXLEN          1024
-#define INIT_COMMANDE   128
 
 #define CHK(v) do{if((v)==-1)raler(1,#v);} while(0)
 
@@ -39,6 +39,91 @@ void raler_log (char *msg)
 
 
 
+/**
+ * Gère le retour des librairies pour les clients
+ * 
+ * @param s descripteur de la socket
+ * @param rep addresse du répertoire
+ */
+void traiter_retour(int s, struct repertoire *rep)
+{
+    struct sockaddr_storage sonadr ;
+    socklen_t salong ;
+    int r, af ;
+    void *nadr;			        /* au format network */
+    uint16_t *no_port;
+    // uint16_t no_port;
+    char padr [INET6_ADDRSTRLEN] ;	/* au format presentation */
+    char buf [MAXLEN] ;
+    char type;
+
+    salong = sizeof sonadr ;
+    r = recvfrom (s, buf, MAXLEN, 0, (struct sockaddr *) &sonadr, &salong) ;
+    af = ((struct sockaddr *) &sonadr)->sa_family ;
+    switch (af)
+    {
+    case AF_INET :
+        nadr = & ((struct sockaddr_in *) &sonadr)->sin_addr ;
+        type = 4;
+        no_port = & ((struct sockaddr_in *) &sonadr)->sin_port ;
+        break ;
+    case AF_INET6 :
+        nadr = & ((struct sockaddr_in6 *) &sonadr)->sin6_addr ;
+        type = 6;
+        no_port = & ((struct sockaddr_in *) &sonadr)->sin_port ;
+        break ;
+    }
+
+    char *nadr_;
+    nadr_ = nadr;
+
+    uint32_t no_commande = ntohs(*(uint32_t *) buf);
+    uint16_t nb_livres = ntohs(*(uint16_t *) &buf[4]);
+
+    int taille_dg = 2 + nb_livres * REPONSE_S;
+    char *dg = malloc(taille_dg * sizeof(char));
+
+    *(uint16_t *) dg = htons(nb_livres);
+    int ind = 2;
+    int o;
+    for (int i=0; i<nb_livres; ++i)
+    {
+        printf("Commande %d, traitement livre %d/%d\n", no_commande, i, nb_livres);
+        // on recopie le titre du livre
+        for (o=0; o<TITRE_S; ++o)
+            dg[ind + o] = buf[6 + i*TITRE_S + o];
+        // puis le type et l'adresse IP (v4 ou v6)
+        dg[ind + TITRE_S] = type;
+        switch (type)
+        {
+        case 4:
+            for (o=0; o<4; ++o)
+                dg[ind + TITRE_S + 1 + o] = nadr_[o];
+            for(; o<16; ++o)
+                dg[ind + TITRE_S + 1 + o] = 0;
+            break;
+        case 6:
+            for (o=0; o<16; ++o)
+                dg[ind + TITRE_S + 1 + o] = nadr_[o];
+            break;
+        default:
+            raler(0,"Normalement, ce message n'apparaitra jamais !");
+            break;
+        }
+        // enfin le port TCP de la librairie
+        
+        *(uint16_t *) &dg[ind + TITRE_S + 1] = *no_port;
+        ind += REPONSE_S;
+    }
+
+    REP_ADD(no_commande, nb_livres, dg, taille_dg, rep);
+
+    inet_ntop (af, nadr, padr, sizeof padr) ;
+    printf ("%s: nb d'octets lus = %d\n", padr, r) ;
+    printf ("    message lu : %s\n", buf) ;
+}
+
+
 
 
 /**
@@ -47,11 +132,12 @@ void raler_log (char *msg)
  * @param an annuaire des librairies
  * @param dg datagramme à envoyer
  * @param len taille du datagramme
- * @param desc_tube descripteur de l'entrée du tube où écrire les réponses
+ * @param rep répertoire des commandes
  */
-void diag_lib(const struct annuaire an, const char *dg, const int len,
-              const int desc_tube)
+void broadcast_lib(const struct annuaire an, const char *dg, const int len,
+            fd_set *read_fds, int *max, int *sockarray, int *ind)
 {
+    // client UDP : envoie aux librairies
     for (int l=0; l<an.nlib; ++l)
     {
         // pour l'envoi
@@ -61,87 +147,47 @@ void diag_lib(const struct annuaire an, const char *dg, const int len,
         socklen_t salong;
         int s, r, family, o;
 
-        // pour la réception
-        struct sockaddr_storage sonadr;
-        int af;
-        void *nadr;			/* au format network */
-        char padr[INET6_ADDRSTRLEN];	/* au format presentation */
-        char buf[MAXLEN];
-        // pour que le père sache de quelle librairie la réponse viendra,
-        // on place son indice en tête du message entré dans le tube
-        *(uint16_t *) buf = l;
+        // Envoi du datagramme à la librarie l
+        memset(&sadr, 0, sizeof sadr);
+        int port = htons(an.ports[l]);
+        printf("Lib %d addr %s port %d\n", l, an.librairies[l], an.ports[l]);    
 
-        switch (fork())
+        if (inet_pton(AF_INET6, an.librairies[l], &sadr6->sin6_addr) == 1)
         {
-        case -1:
-            raler(1, "Erreur fork");
-            break;
-        
-        case 0:
-            // Envoi du datagramme à la librarie l
-
-            memset (&sadr, 0, sizeof sadr);
-            int port = htons(an.ports[l]);
-
-            if (inet_pton(AF_INET6, an.librairies[l], &sadr6->sin6_addr) == 1)
-            {
-                family = PF_INET6;
-                sadr6->sin6_family = AF_INET6;
-                sadr6->sin6_port = port;
-                salong = sizeof *sadr6;
-            }
-            else if (inet_pton(AF_INET6, an.librairies[l], &sadr4->sin_addr) == 1)
-            {
-                family = PF_INET ;
-                sadr4->sin_family = AF_INET;
-                sadr4->sin_port = port;
-                salong = sizeof *sadr4;
-            }
-            else
-                raler(0, "adresse '%s' non reconnue\n", an.librairies[l]);
-
-            s = socket(family, SOCK_DGRAM, 0);
-            if (s==-1) raler(0, "socket");
-
-            o = 1;
-            setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
-
-            printf("Envoi à la librairie %d\n", l);
-            r = sendto(s, dg, len, 0, (struct sockaddr *) &sadr, salong);
-            if (r == -1) raler(1, "send to");
-
-
-            // puis attente de la réponse
-            // réception du datagramme
-
-            salong = sizeof sonadr;
-            r = recvfrom(s, &buf[2], MAXLEN-2, 0,
-                        (struct sockaddr *) &sonadr, &salong);
-            af = ((struct sockaddr *) &sonadr)->sa_family;
-
-            switch (af)
-            {
-                case AF_INET:
-                    nadr = & ((struct sockaddr_in *) &sonadr)->sin_addr ;
-                    break ;
-                case AF_INET6 :
-                    nadr = & ((struct sockaddr_in6 *) &sonadr)->sin6_addr ;
-                    break ;
-            }
-            inet_ntop(af, nadr, padr, sizeof padr);
-            printf ("Réponse :\n");
-            printf ("%s: nb d'octets lus = %d\n", padr, r);
-
-            // envoie de la réponse vers le processus père, via le tube
-            CHK(write(desc_tube, buf, r));
-            close(s);
-            break;
-        
-        default:
-            CHK(close(desc_tube));
-            break;
+            family = PF_INET6;
+            sadr6->sin6_family = AF_INET6;
+            sadr6->sin6_port = port;
+            salong = sizeof *sadr6;
         }
+        else if (inet_pton(AF_INET6, an.librairies[l], &sadr4->sin_addr) == 1)
+        {
+            family = PF_INET ;
+            sadr4->sin_family = AF_INET;
+            sadr4->sin_port = port;
+            salong = sizeof *sadr4;
+        }
+        else
+            raler(0, "adresse '%s' non reconnue\n", an.librairies[l]);
+
+        s = socket(family, SOCK_DGRAM, 0);
+        if (s==-1) raler(0, "socket");
+
+        printf("s %d\n", s);
+
+        o = 1;
+        setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
+
+        printf("Envoi à la librairie %d\n", l);
+        r = sendto(s, dg, len, 0, (struct sockaddr *) &sadr, salong);
+        if (r == -1) raler(1, "send to");
+
+        // On ajoute la socket dans le fds_set
+        FD_SET(s, read_fds);
+        if (s > *max)
+            *max = s;
         
+        sockarray[*ind] = s;
+        *ind = *ind + 1;
     }
 }
 
@@ -154,11 +200,11 @@ void diag_lib(const struct annuaire an, const char *dg, const int len,
  * 
  * @param in
  * @param no_commande numéro de commande
- * @param an annuaire des librairies
- * @param desc_tube descripteur de l'entrée du tube où écrire les réponses
+ * @param rep addresse du réperoitre des commandes
+ * @param dg pointeur sur le datagramme à envoyer
+ * @result taille du datagramme à envoyer
  */
-void serveur(int in, const uint32_t no_commande, const struct annuaire an,
-             const int desc_tube)
+int traiter_requete_client(int in, const uint32_t no_commande, char *dg)
 {
     int r, n = 0;
     char buf[MAXLEN];
@@ -178,7 +224,9 @@ void serveur(int in, const uint32_t no_commande, const struct annuaire an,
     // datagramme à envoyer à toutes les libraries
     int taille_dg = ID_S + NB_S + n_l*TITRE_S;
     printf("%d\n",taille_dg);
-    char *dg = malloc(taille_dg*sizeof(char));
+    dg = calloc(taille_dg, sizeof(char));
+    if (dg == NULL)
+        raler(0, "calloc");
 
     // numéro de commande
     *(uint32_t *) dg = htons(no_commande);
@@ -195,25 +243,19 @@ void serveur(int in, const uint32_t no_commande, const struct annuaire an,
         ind_buf += TITRE_S;
     }
 
-    diag_lib(an, dg, taille_dg, desc_tube);
-
-
-    
-    
+    return taille_dg;
 }
 
 /**
- * @brief Met en place le serveur UDP de nil
+ * @brief Met en place le serveur TCP / UDP de nil
+ * (TCP pour les clients, UDP pour les librairies)
  * 
  * @param serv
  * @param an annuaire des librairies
- * @param tube [2] descripteurs du tube
- * @param reo adresse du répertoire des commandes
  */
-void demon(char *serv, const struct annuaire an,
-           const int tube[2], struct repertoire *rep)
+void demon(char *serv, const struct annuaire an)
 {
-    int s[MAXSOCK], sd, nsock, r, opt = 1;
+    int s[MAXSOCK], sd, nsock_tcp, r, opt = 1;
     struct addrinfo hints, *res, *res0;
     char *cause;
 
@@ -224,47 +266,64 @@ void demon(char *serv, const struct annuaire an,
 
     if ((r = getaddrinfo(NULL, serv, &hints, &res0)) != 0)
         raler(0, "getaddrinfo: %s\n", gai_strerror(r));
-    
-    nsock = 0;
-    for (res = res0; res && nsock < MAXSOCK; res = res->ai_next)
+
+
+    // ouverture des sockets pour réception TCP des clients   
+    nsock_tcp = 0;
+    for (res = res0; res && nsock_tcp < MAXSOCK; res = res->ai_next)
     {
-        s[nsock] = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        s[nsock_tcp] = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
         
-        if (s[nsock] == -1)
-            cause = "socket";
+        if (s[nsock_tcp] == -1)
+            cause = "socket TCP";
         else
         {
-            setsockopt(s[nsock], IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof opt);
-            setsockopt(s[nsock], SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt);
-            r = bind(s[nsock], res->ai_addr, res->ai_addrlen);
+            setsockopt(s[nsock_tcp], IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof opt);
+            setsockopt(s[nsock_tcp], SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt);
+            r = bind(s[nsock_tcp], res->ai_addr, res->ai_addrlen);
 
             if (r == -1)
             {
-                cause = "bind";
-                close(s[nsock]);
+                cause = "bind TCP";
+                close(s[nsock_tcp]);
             }
             else
             {
-                listen(s[nsock], 5);
-                nsock++;
+                listen(s[nsock_tcp], 5);
+                nsock_tcp++;
             }
         }
     }
-
-    if (nsock == 0) raler_log(cause);
+    if (nsock_tcp == 0) raler_log(cause);
     freeaddrinfo(res0);
 
-    uint32_t no_commande = 0;
-    // struct repertoire rp;
+    // ouverture des sockets UDP
+    // indice de la dernière case occupée
+    int nb_sock = nsock_tcp;
+    // s = [tcp0, tcp1, ..., tcpNt, udp0, udp1, ..., udpNu]
 
+    uint32_t no_commande = 0;
+    struct repertoire rp;
+    REP_ZERO(&rp);
+
+    // attente d'une connexion d'un client
     for (;;)
     {
         fd_set readfds;
         int i, max = 0;
-
         FD_ZERO(&readfds);
-        for (i=0; i<nsock; ++i)
+
+        // set pour tous les descripteurs ouverts
+        for (i=0; i<nb_sock; ++i)
         {
+            FD_SET(s[i], &readfds);
+            printf("TCP > %d\n", s[i]);
+            if (s[i] > max)
+                max = s[i];
+        }
+        for (i=nsock_tcp; i<nb_sock; ++i)
+        {
+            printf("UDP > %d\n", s[i]);
             FD_SET(s[i], &readfds);
             if (s[i] > max)
                 max = s[i];
@@ -273,8 +332,9 @@ void demon(char *serv, const struct annuaire an,
         if (select(max+1, &readfds, NULL, NULL, NULL) == -1)
             raler_log("select");
 
-
-        for (i=0; i<nsock; ++i)
+        
+        // requête d'un client
+        for (i=0; i<nsock_tcp; ++i)
         {
             struct sockaddr_storage sonadr ;
             socklen_t salong ;
@@ -284,22 +344,22 @@ void demon(char *serv, const struct annuaire an,
                 no_commande++;
                 salong = sizeof sonadr;
                 sd = accept(s[i], (struct sockaddr *) &sonadr, &salong);
-                switch (fork())
-                {
-                case -1:
-                    raler(1, "fork");
-                    break;
-                case 0:
-                    CHK(close(tube[0]));
-                    serveur(sd, no_commande, an, tube[1]);
-                    CHK(close(tube[1]));
-                    exit(0);
-                default:
-                    CHK(close(tube[0]));
-                    ajouter_commande(no_commande, sd, rep);
-                    // close(sd);
-                    break;
-                }
+
+                char *dg = NULL;
+                int taille_dg;
+                taille_dg = traiter_requete_client(sd, no_commande, dg);
+
+                broadcast_lib(an, dg, taille_dg, &readfds, &max, s, &nb_sock);
+                free(dg);
+            }
+        }
+
+        // réponse d'une librairie
+        for (i=nsock_tcp; i<nb_sock; ++i)
+        {
+            if (FD_ISSET(s[i], &readfds))
+            {
+                traiter_retour(s[i], &rp);
             }
         }
     }
@@ -307,40 +367,7 @@ void demon(char *serv, const struct annuaire an,
 
 
 
-struct reponse
-{
-    struct annuaire *an;
-    int desc;
-};
 
-void *reponses_lib(void *ent)
-{
-    struct reponse *rep = (struct reponse *) ent;
-    int nlus;
-    char buf[MAXLEN];
-    int ind = 0;
-    for (;;)
-    {
-        CHK(nlus = read(rep->desc, buf, MAXLEN));
-        // début du datagramme reçu : LLCCCCNN...
-        // le vrai dg est               ******...
-        uint16_t ind_lib = *(uint16_t *) buf;
-        uint32_t no_commande = *(uint32_t *) &buf[2];
-        uint16_t nb_livres = ntohs(*(uint16_t *) &buf[6]);
-
-        char *dg_retour = calloc(NB_S + 29*nb_livres, sizeof(char));
-
-        *(uint16_t *) dg_retour = htons(nb_livres);
-        for (lint)
-        
-        // si on a lu le début d'une autre commande, on la place au début
-        if (ID_S + NB_S + nb_livres*TITRE_S != nlus)
-        {
-            memmove(buf, &buf[nlus], MAXLEN-nlus);
-        }
-        free(dg_retour);
-    }
-}
 
 
 
@@ -366,18 +393,13 @@ int main(int argc, char *argv[])
     init_annuaire(nlib, &argv[3], &an);
 
 
-    struct repertoire rep;
-    init_repertoire(INIT_COMMANDE, &rep);
 
-    // tube qui gère librairie -> père
-    int tube[2];
-    CHK(pipe(tube));
 
     setsid();   // nouvelle session
-    chdir("/"); // change le répertoir courant
+    chdir("/"); // change le répertoire courant
     umask(0);   // initialise le masque binaire
     openlog("exemple", LOG_PID | LOG_CONS, LOG_DAEMON);
-    demon(serv, an, tube, &rep);
+    demon(serv, an);
     exit(1);
 
 
