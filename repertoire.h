@@ -18,6 +18,8 @@ struct repertoire
  */
 void REP_ZERO(struct repertoire *rp);
 
+void REP_DISP(const struct repertoire *re);
+
 /**
  * @biref ajoute une commande au répertoire,
  * si la commande existait déjà, elle est complétée

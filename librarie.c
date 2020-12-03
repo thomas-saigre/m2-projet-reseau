@@ -69,10 +69,8 @@ void traiter_commande(int s, struct stock *lib)
     for (int i=0; i<nb_livre; ++i)
     {
         char titre[TITRE_S + 1];
-        for (int s=0; s<TITRE_S; ++s)
-            titre[s] = buf[ind + s];
-        titre[TITRE_S] = '\0';
-        // snprintf(titre, TITRE_S + 1, "%s", &buf[ind]);
+        memcpy(titre, &buf[ind], TITRE_S);
+        titre[TITRE_S] = '\0';  // pour être sûr que ça se termine par \0
         ind_livre = est_disponible(titre, lib);
 
         if (ind_livre != -1)

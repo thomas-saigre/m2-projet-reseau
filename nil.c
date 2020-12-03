@@ -72,7 +72,7 @@ void traiter_retour(int s, struct repertoire *rep)
     case AF_INET6 :
         nadr = & ((struct sockaddr_in6 *) &sonadr)->sin6_addr ;
         type = 6;
-        no_port = & ((struct sockaddr_in *) &sonadr)->sin_port ;
+        no_port = & ((struct sockaddr_in6 *) &sonadr)->sin6_port ;
         break ;
     }
 
@@ -368,7 +368,6 @@ void demon(char *serv, const struct annuaire an)
     uint32_t no_commande = 0;
     struct repertoire rp;
     REP_ZERO(&rp);
-
     // attente d'une connexion d'un client
     for (;;)
     {
@@ -427,6 +426,7 @@ void demon(char *serv, const struct annuaire an)
             if (FD_ISSET(s[i], &readfds))
             {
                 traiter_retour(s[i], &rp);
+                REP_DISP(&rp);
             }
         }
     }
