@@ -97,6 +97,7 @@ void traiter_commande(int s, struct stock *lib)
     int taille_dg = ID_S + NB_S + n_dispo*TITRE_S;
     r = sendto(s, dg_send, taille_dg, 0, (struct sockaddr *) &sonadr, salong);
     if (r == -1) raler(1, "sendto");
+    printf("Réponse envoyée !\n\n");
 }
 
 
@@ -149,7 +150,7 @@ int main(int argc, char *argv[])
                 nsock++;
         }
     }
-    if (nsock == 0) raler(0, cause);
+    if (nsock == 0) raler(1, cause);
     freeaddrinfo(res0);
 
     for (;;)

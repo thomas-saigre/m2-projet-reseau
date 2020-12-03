@@ -11,6 +11,9 @@ void init_annuaire(int nlib, char *argv[], struct annuaire *an)
     an->ports = malloc(nlib * sizeof(int));
     if (an->ports == NULL)
         raler(0, "Erreur malloc");
+    an->sock = malloc(nlib * sizeof(int));
+    if (an->sock == NULL)
+        raler(0, "Erreur malloc");
 
     int ind = 0;
     for (int i=0; i<nlib; ++i)
@@ -25,4 +28,5 @@ void free_annuaire(struct annuaire *an)
 {
     free(an->librairies);
     free(an->ports);
+    free(an->sock);
 }

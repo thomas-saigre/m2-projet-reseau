@@ -14,6 +14,8 @@
 #include "repertoire.h"
 #include <sys/time.h>
 
+#define DISP
+
 #define TITRE_S         10
 #define ID_S            4
 #define NB_S            2
@@ -47,18 +49,18 @@ void raler_log (char *msg)
  */
 void traiter_retour(int s, struct repertoire *rep)
 {
+    printf("\nRetour commande\n");
     struct sockaddr_storage sonadr ;
     socklen_t salong ;
     int r, af ;
     void *nadr;			        /* au format network */
     uint16_t *no_port;
-    // uint16_t no_port;
     char padr [INET6_ADDRSTRLEN] ;	/* au format presentation */
     char buf [MAXLEN] ;
     char type;
 
     salong = sizeof sonadr ;
-    r = recvfrom (s, buf, MAXLEN, 0, (struct sockaddr *) &sonadr, &salong) ;
+    r = recvfrom(s, buf, MAXLEN, 0, (struct sockaddr *) &sonadr, &salong) ;
     af = ((struct sockaddr *) &sonadr)->sa_family ;
     switch (af)
     {
@@ -118,9 +120,12 @@ void traiter_retour(int s, struct repertoire *rep)
 
     REP_ADD(no_commande, nb_livres, dg, taille_dg, rep);
 
-    inet_ntop (af, nadr, padr, sizeof padr) ;
-    printf ("%s: nb d'octets lus = %d\n", padr, r) ;
-    printf ("    message lu : %s\n", buf) ;
+    inet_ntop (af, nadr, padr, sizeof padr);
+    (void) r;
+#ifdef DISP
+    printf ("%s: nb d'octets lus = %d\n", padr, r);
+    printf ("    message lu : %s\n", buf);
+#endif
 }
 
 
@@ -134,8 +139,7 @@ void traiter_retour(int s, struct repertoire *rep)
  * @param len taille du datagramme
  * @param rep répertoire des commandes
  */
-void broadcast_lib(const struct annuaire an, const char *dg, const int len,
-            fd_set *read_fds, int *max, int *sockarray, int *ind)
+void broadcast_lib(const struct annuaire an, const char *dg, const int len)
 {
     // client UDP : envoie aux librairies
     for (int l=0; l<an.nlib; ++l)
@@ -145,12 +149,14 @@ void broadcast_lib(const struct annuaire an, const char *dg, const int len,
         struct sockaddr_in  *sadr4 = (struct sockaddr_in  *) &sadr;
         struct sockaddr_in6 *sadr6 = (struct sockaddr_in6 *) &sadr;
         socklen_t salong;
-        int s, r, family, o;
+        int r, family, o;
 
         // Envoi du datagramme à la librarie l
         memset(&sadr, 0, sizeof sadr);
         int port = htons(an.ports[l]);
-        printf("Lib %d addr %s port %d\n", l, an.librairies[l], an.ports[l]);    
+#ifdef DISP
+        printf("Lib %d addr %s port %d\n", l, an.librairies[l], an.ports[l]);
+#endif    
 
         if (inet_pton(AF_INET6, an.librairies[l], &sadr6->sin6_addr) == 1)
         {
@@ -169,25 +175,20 @@ void broadcast_lib(const struct annuaire an, const char *dg, const int len,
         else
             raler(0, "adresse '%s' non reconnue\n", an.librairies[l]);
 
-        s = socket(family, SOCK_DGRAM, 0);
-        if (s==-1) raler(0, "socket");
+        (void) family;
 
-        printf("s %d\n", s);
+
 
         o = 1;
-        setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
+        setsockopt(an.sock[l], SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
+        // setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
 
+#ifdef DISP
         printf("Envoi à la librairie %d\n", l);
-        r = sendto(s, dg, len, 0, (struct sockaddr *) &sadr, salong);
+#endif
+        r = sendto(an.sock[l], dg, len, 0, (struct sockaddr *) &sadr, salong);
         if (r == -1) raler(1, "send to");
 
-        // On ajoute la socket dans le fds_set
-        FD_SET(s, read_fds);
-        if (s > *max)
-            *max = s;
-        
-        sockarray[*ind] = s;
-        *ind = *ind + 1;
     }
 }
 
@@ -204,7 +205,7 @@ void broadcast_lib(const struct annuaire an, const char *dg, const int len,
  * @param dg pointeur sur le datagramme à envoyer
  * @result taille du datagramme à envoyer
  */
-int traiter_requete_client(int in, const uint32_t no_commande, char *dg)
+int traiter_requete_client(int in, const uint32_t no_commande, char **dg)
 {
     int r, n = 0;
     char buf[MAXLEN];
@@ -224,19 +225,19 @@ int traiter_requete_client(int in, const uint32_t no_commande, char *dg)
     // datagramme à envoyer à toutes les libraries
     int taille_dg = ID_S + NB_S + n_l*TITRE_S;
     printf("%d\n",taille_dg);
-    dg = calloc(taille_dg, sizeof(char));
-    if (dg == NULL)
+    *dg = calloc(taille_dg, sizeof(char));
+    if (*dg == NULL)
         raler(0, "calloc");
 
     // numéro de commande
-    *(uint32_t *) dg = htons(no_commande);
+    *(uint32_t *) *dg = htons(no_commande);
     // nombre de livres
-    *(u_int16_t *) &dg[ID_S] = nb_livres;
+    *(u_int16_t *) &(*dg)[ID_S] = nb_livres;
     // titres des livres
     int ind = 6, ind_buf = 2;
     for (int i=0; i<n_l; ++i)
     {
-        necr = snprintf(&dg[ind], TITRE_S, "%s", &buf[ind_buf]);
+        necr = snprintf(&(*dg)[ind], TITRE_S, "%s", &buf[ind_buf]);
         if (necr > TITRE_S)
             raler(0, "nil : Titre %s trop long", &buf[ind_buf]);
         ind += TITRE_S;
@@ -298,8 +299,70 @@ void demon(char *serv, const struct annuaire an)
     freeaddrinfo(res0);
 
     // ouverture des sockets UDP
+    int nsock = nsock_tcp;
+    for (int l=0; l < an.nlib; ++l)
+    {
+        // pour l'envoi
+        struct sockaddr_storage sadr;
+        struct sockaddr_in  *sadr4 = (struct sockaddr_in  *) &sadr;
+        struct sockaddr_in6 *sadr6 = (struct sockaddr_in6 *) &sadr;
+        socklen_t salong;
+        int so, r, family, o;
+
+
+        // Envoi du datagramme à la librarie l
+        memset(&sadr, 0, sizeof sadr);
+        int port = htons(an.ports[l]);
+
+        if (inet_pton(AF_INET6, an.librairies[l], &sadr6->sin6_addr) == 1)
+        {
+            family = PF_INET6;
+            sadr6->sin6_family = AF_INET6;
+            sadr6->sin6_port = port;
+            salong = sizeof *sadr6;
+        }
+        else if (inet_pton(AF_INET6, an.librairies[l], &sadr4->sin_addr) == 1)
+        {
+            family = PF_INET ;
+            sadr4->sin_family = AF_INET;
+            sadr4->sin_port = port;
+            salong = sizeof *sadr4;
+        }
+        else
+            raler(0, "adresse '%s' non reconnue\n", an.librairies[l]);
+
+        so = socket(family, SOCK_DGRAM, 0);
+        if (so == -1)
+            raler(1, "socket %d", l);
+        else
+        {
+            o = 1 ;		/* pour Linux */
+            setsockopt(s[nsock], IPPROTO_IPV6, IPV6_V6ONLY, &o, sizeof o);
+            (void) salong;
+            (void) r;
+            // r = bind(s[nsock], (struct sockaddr *) &sadr, salong);
+            // if (r == -1)
+            // {
+            //     cause = "bind";
+            //     close (s [nsock]);
+            // }
+            // else
+            // {
+                s[nsock] = so;
+                nsock++;
+                an.sock[l] = so;
+            // }
+        }
+    }
+
+
+    if (nsock == nsock_tcp) raler(1, cause);
+
+
+
+
     // indice de la dernière case occupée
-    int nb_sock = nsock_tcp;
+    // int nb_sock = nsock_tcp;
     // s = [tcp0, tcp1, ..., tcpNt, udp0, udp1, ..., udpNu]
 
     uint32_t no_commande = 0;
@@ -314,16 +377,20 @@ void demon(char *serv, const struct annuaire an)
         FD_ZERO(&readfds);
 
         // set pour tous les descripteurs ouverts
-        for (i=0; i<nb_sock; ++i)
+        for (i=0; i<nsock_tcp; ++i)
         {
             FD_SET(s[i], &readfds);
+#ifdef DISP            
             printf("TCP > %d\n", s[i]);
+#endif
             if (s[i] > max)
                 max = s[i];
         }
-        for (i=nsock_tcp; i<nb_sock; ++i)
+        for (i=nsock_tcp; i<nsock; ++i)
         {
+#ifdef DISP            
             printf("UDP > %d\n", s[i]);
+#endif
             FD_SET(s[i], &readfds);
             if (s[i] > max)
                 max = s[i];
@@ -347,15 +414,15 @@ void demon(char *serv, const struct annuaire an)
 
                 char *dg = NULL;
                 int taille_dg;
-                taille_dg = traiter_requete_client(sd, no_commande, dg);
+                taille_dg = traiter_requete_client(sd, no_commande, &dg);
 
-                broadcast_lib(an, dg, taille_dg, &readfds, &max, s, &nb_sock);
+                broadcast_lib(an, dg, taille_dg);
                 free(dg);
             }
         }
 
         // réponse d'une librairie
-        for (i=nsock_tcp; i<nb_sock; ++i)
+        for (i=nsock_tcp; i<nsock; ++i)
         {
             if (FD_ISSET(s[i], &readfds))
             {

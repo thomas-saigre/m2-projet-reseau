@@ -8,6 +8,7 @@ struct annuaire
     int nlib;
     char **librairies;
     int *ports;
+    int *sock;
 };
 
 /**
