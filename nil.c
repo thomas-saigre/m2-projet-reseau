@@ -11,7 +11,7 @@
 #include <syslog.h>
 #include "raler.h"
 #include "annuaire.h"
-#include "repertoire.h"
+#include "commande.h"
 #include <sys/time.h>
 
 #define DISP
@@ -47,7 +47,7 @@ void raler_log (char *msg)
  * @param s descripteur de la socket
  * @param rep addresse du répertoire
  */
-void traiter_retour(int s, struct repertoire *rep)
+void traiter_retour(int s, struct commande *cm)
 {
     printf("\nRetour commande\n");
     struct sockaddr_storage sonadr ;
@@ -118,7 +118,7 @@ void traiter_retour(int s, struct repertoire *rep)
         ind += REPONSE_S;
     }
 
-    REP_ADD(no_commande, nb_livres, dg, taille_dg, rep);
+    CMD_ADD(no_commande, nb_livres, dg, taille_dg, cm);
 
     inet_ntop (af, nadr, padr, sizeof padr);
     (void) r;
@@ -366,8 +366,9 @@ void demon(char *serv, const struct annuaire an)
     // s = [tcp0, tcp1, ..., tcpNt, udp0, udp1, ..., udpNu]
 
     uint32_t no_commande = 0;
-    struct repertoire rp;
-    REP_ZERO(&rp);
+    struct commande cm;
+    CMD_ZERO(delai, &cm);
+    struct timeval attente = {0, 500000};   // 0.5 sec d'attente pour le select
     // attente d'une connexion d'un client
     for (;;)
     {
@@ -379,23 +380,17 @@ void demon(char *serv, const struct annuaire an)
         for (i=0; i<nsock_tcp; ++i)
         {
             FD_SET(s[i], &readfds);
-#ifdef DISP            
-            printf("TCP > %d\n", s[i]);
-#endif
             if (s[i] > max)
                 max = s[i];
         }
         for (i=nsock_tcp; i<nsock; ++i)
         {
-#ifdef DISP            
-            printf("UDP > %d\n", s[i]);
-#endif
             FD_SET(s[i], &readfds);
             if (s[i] > max)
                 max = s[i];
         }
 
-        if (select(max+1, &readfds, NULL, NULL, NULL) == -1)
+        if (select(max+1, &readfds, NULL, NULL, &attente) == -1)
             raler_log("select");
 
         
@@ -425,10 +420,13 @@ void demon(char *serv, const struct annuaire an)
         {
             if (FD_ISSET(s[i], &readfds))
             {
-                traiter_retour(s[i], &rp);
-                REP_DISP(&rp);
+                traiter_retour(s[i], &cm);
+                CMD_DISP(&cm);
             }
         }
+
+        // on regarde si un délai des commandes est arrivé à expiration
+
     }
 }
 
