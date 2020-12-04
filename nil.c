@@ -87,26 +87,36 @@ void traiter_retour(int s, struct commande *cm)
 
     *(uint16_t *) dg = htons(nb_livres);
     int ind = 2;
-    int o;
+    // int o;
+
+    inet_ntop (af, nadr, padr, sizeof padr);
+#ifdef DISP
+    printf ("%s: nb d'octets lus = %d\n", padr, r);
+#endif
+
     for (int i=0; i<nb_livres; ++i)
     {
         printf("Commande %d, traitement livre %d/%d\n", no_commande, i, nb_livres);
         // on recopie le titre du livre
-        for (o=0; o<TITRE_S; ++o)
-            dg[ind + o] = buf[6 + i*TITRE_S + o];
+        // for (o=0; o<TITRE_S; ++o)
+        //     dg[ind + o] = buf[6 + i*TITRE_S + o];
+        memcpy(&dg[ind], &buf[6 + i*TITRE_S], TITRE_S);
         // puis le type et l'adresse IP (v4 ou v6)
         dg[ind + TITRE_S] = type;
         switch (type)
         {
         case 4:
-            for (o=0; o<4; ++o)
-                dg[ind + TITRE_S + 1 + o] = nadr_[o];
-            for(; o<16; ++o)
-                dg[ind + TITRE_S + 1 + o] = 0;
+            // for (o=0; o<4; ++o)
+            //     dg[ind + TITRE_S + 1 + o] = nadr_[o];
+            memcpy(&dg[ind + TITRE_S + 1], nadr_, 4);
+            // for(; o<16; ++o)
+            //     dg[ind + TITRE_S + 1 + o] = 0;
+            memset(&dg[ind + TITRE_S + 5], 0, 12);
             break;
         case 6:
-            for (o=0; o<16; ++o)
-                dg[ind + TITRE_S + 1 + o] = nadr_[o];
+            // for (o=0; o<16; ++o)
+            //     dg[ind + TITRE_S + 1 + o] = nadr_[o];
+            memcpy(&dg[ind + TITRE_S + 1], nadr_, 16);
             break;
         default:
             raler(0,"Normalement, ce message n'apparaitra jamais !");
@@ -116,16 +126,13 @@ void traiter_retour(int s, struct commande *cm)
         
         *(uint16_t *) &dg[ind + TITRE_S + 1] = *no_port;
         ind += REPONSE_S;
+        
     }
 
-    CMD_ADD(no_commande, nb_livres, dg, taille_dg, cm);
-
-    inet_ntop (af, nadr, padr, sizeof padr);
-    (void) r;
-#ifdef DISP
-    printf ("%s: nb d'octets lus = %d\n", padr, r);
-    printf ("    message lu : %s\n", buf);
-#endif
+    if (nb_livres > 0)
+        CMD_ADD(no_commande, nb_livres, time(NULL) + delai, dg, taille_dg, cm);
+    else
+        printf("Aucune réponse de la librairie\n");
 }
 
 
@@ -154,9 +161,6 @@ void broadcast_lib(const struct annuaire an, const char *dg, const int len)
         // Envoi du datagramme à la librarie l
         memset(&sadr, 0, sizeof sadr);
         int port = htons(an.ports[l]);
-#ifdef DISP
-        printf("Lib %d addr %s port %d\n", l, an.librairies[l], an.ports[l]);
-#endif    
 
         if (inet_pton(AF_INET6, an.librairies[l], &sadr6->sin6_addr) == 1)
         {
@@ -184,8 +188,8 @@ void broadcast_lib(const struct annuaire an, const char *dg, const int len)
         // setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
 
 #ifdef DISP
-        printf("Envoi à la librairie %d\n", l);
-#endif
+        printf("Lib %d addr %s port %d\n", l, an.librairies[l], an.ports[l]);
+#endif    
         r = sendto(an.sock[l], dg, len, 0, (struct sockaddr *) &sadr, salong);
         if (r == -1) raler(1, "send to");
 
@@ -367,7 +371,10 @@ void demon(char *serv, const struct annuaire an)
 
     uint32_t no_commande = 0;
     struct commande cm;
-    CMD_ZERO(delai, &cm);
+    CMD_ZERO(an.nlib, &cm);
+    printf("Au début :\n");
+    CMD_DISP(&cm);
+    printf("\n");
     struct timeval attente = {0, 500000};   // 0.5 sec d'attente pour le select
     // attente d'une connexion d'un client
     for (;;)
@@ -426,6 +433,7 @@ void demon(char *serv, const struct annuaire an)
         }
 
         // on regarde si un délai des commandes est arrivé à expiration
+        tester_delai(&cm);
 
     }
 }
