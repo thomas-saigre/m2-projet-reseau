@@ -64,3 +64,12 @@ int est_disponible(const char *titre, const struct stock *st)
         }
     return ind;
 }
+
+void afficher_stock(const struct stock *st)
+{
+    printf("Stock disponible : ");
+    for (int i = 0; i < st->n; ++i)
+        if (st->disp[i])
+            printf("%s ", &st->livres[i*TITRE_S]);
+    printf("\n");
+}

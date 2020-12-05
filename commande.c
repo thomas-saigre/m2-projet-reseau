@@ -68,11 +68,10 @@ void nouvelle_commande(const uint32_t no_commande, const int desc,
     cm->references[ind] = no_commande;
     cm->desc[ind] = desc;
     cm->date_send[ind] = date_envoi;
-    // cm->used[ind] = 1;
     // on ne change pas le reste pour éviter de faire une copie
 }
 
-// avant d'utiliser cette fonction, on utilise CMD_NEW pour initialiser
+// avant d'utiliser cette fonction, utiliser nouvelle_commande pour initialiser
 void ajouter_commande(const uint32_t no_commande, const int nb_livres_new,
              char *dg, int len, struct commande *cm)
 {
@@ -91,6 +90,8 @@ void ajouter_commande(const uint32_t no_commande, const int nb_livres_new,
         printf("Déjà commencée %p\n", cm->datagrammes[ind]);
         int len_old = cm->taille_dg[ind];
         int new_len = len_old + len - 2;
+        if (new_len > MAXLEN)
+            raler(0, "Trop de réponse, datagramme trop petit :/");
         uint16_t nb_livres = ntohs(*(uint16_t *) cm->datagrammes[ind]);
 
         cm->datagrammes[ind] = realloc(cm->datagrammes[ind], new_len);
@@ -131,69 +132,6 @@ void ajouter_commande(const uint32_t no_commande, const int nb_livres_new,
             envoyer_reponse(ind, cm);
         }
     }
-
-/*
-    // recherche si la commande est déjà commencée
-    int ind = 0;
-    int is_available = 0, ind_available = -1;
-    for (; ind < CLIENT_MAX; ++ind)
-    {
-        if (cm->references[ind] == no_commande && cm->used[ind] != 0)
-        {
-            break;
-        }
-        // on en profite pour chercher un emplacement libre
-        if (cm->used[ind] == 0 && is_available == 0)
-        {
-            ind_available = ind;
-            is_available = 1;
-        }
-    }
-    printf("ind : %d\n", ind);
-
-    if (is_available == 0 && ind == CLIENT_MAX)
-        raler(0, "Trop de commande simultanées");
-    
-    if (ind != CLIENT_MAX)  // la commande était déjà commencée
-    {
-        printf("Déjà commencée %p\n", cm->datagrammes[ind]);
-        int len_old = cm->taille_dg[ind];
-        int new_len = len_old + len;
-        uint16_t nb_livres = ntohs(*(uint16_t *) cm->datagrammes[ind]);
-
-        cm->datagrammes[ind] = realloc(cm->datagrammes[ind], new_len);
-        if (cm->datagrammes[ind] == NULL)
-            raler(0, "Erreur realloc");
-        
-        printf("%p\n", cm->datagrammes[ind]);
-        nb_livres += nb_livres_new;
-        *(uint16_t *) cm->datagrammes[ind] = htons(nb_livres);
-
-        // for (int i=0; i<len; ++i)
-        //     rp->datagrammes[ind][len_old + i] = dg[i + 2];
-        memcpy(&(cm->datagrammes[ind][len_old]), &dg[2], len);
-        free(dg);   // il faut libérer cette mémoire alloué dans ce cas
-        
-        cm->taille_dg[ind] = new_len;
-        printf("Nb reçus, av : %d   ", cm->recus[ind]);
-        cm->recus[ind] += 1;
-        if (cm->recus[ind] == cm->nlib)
-            // envoyer le dg
-            (void) new_len;
-    }
-    else    // sinon on la crée
-    {
-        printf("Nouvelle commande\n");
-        cm->references[ind_available] = no_commande;
-        cm->taille_dg[ind_available] = len;
-        cm->used[ind_available] = 1;
-        cm->date_send[ind_available] = date_envoi;
-        cm->datagrammes[ind_available] = dg;
-        cm->recus[ind_available] = 1;
-        if (cm->recus[ind] == cm->nlib)
-            // envoyer le dg
-            (void) len;
-    }*/
 }
 
 void tester_delai(struct commande *cm)

@@ -41,4 +41,9 @@ int reserver_livre(const char *titre, struct stock *st);
  */
 int est_disponible(const char *titre, const struct stock *st);
 
+/**
+ * @brief affiche le stock encore disponible
+ */
+void afficher_stock(const struct stock *st);
+
 #endif

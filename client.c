@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include "raler.h"
+#include "retour.h"
 
 #define TITRE_S   10
 #define MAX_LEN   1024
@@ -19,13 +20,13 @@ void usage (char *argv0)
 }
 
 /**
- * @brief envoie une requête TCP au serveur NIL
+ * @brief gère la commande du client
  * @param serveur addresse sur serveur (IPv4 ou IPv6)
  * @param port port TCP du serveur
  * @param n nombre de livre à commander
  * @param livre référence de l'ouvrage
  */
-void envoyer_requete(const char *serveur, const char *port,
+void gerer_requete(const char *serveur, const char *port,
     const uint16_t n, char *livre[])
 {
     int err;
@@ -46,8 +47,8 @@ void envoyer_requete(const char *serveur, const char *port,
         if (n_ecrits > 10) raler(0, "Titre %s trop long", livre[i]);
         i_dg += TITRE_S;
     }
-
-
+// Client <-> Nil
+    // ouverture de la connection TCP vers nil
     struct addrinfo hints, *res, *res0 ;
     memset(&hints, 0, sizeof hints);
     hints.ai_family = PF_UNSPEC ;
@@ -77,12 +78,12 @@ void envoyer_requete(const char *serveur, const char *port,
     if (s == -1) raler(0, "Erreur : %s", cause);
     freeaddrinfo(res0);
 
-    
+    // envoi de la requête
     printf("Envoi requête à %s/%s\n", serveur, port);
     err = write(s, datagramme, taille_dg);
     if (err == -1) raler(1, "Échec envoi requête");
 
-
+    // attente de la réponse
     char buf_rep[MAX_LEN];
     printf("\nAttente réponse\n");
     err = read(s, buf_rep, MAX_LEN);
@@ -91,10 +92,25 @@ void envoyer_requete(const char *serveur, const char *port,
     printf("Réponse reçue, nb octets lus %d\n", err);
     printf("\t%s\n", buf_rep);
 
+    // fermeture de la connexion
     close(s);
-
-
     free(datagramme);
+
+// Client <-> librairies
+    // uint16_t nb_livres = ntohs(*(u_int16_t *) buf_rep);
+    // size_t size_dg = 2 + nb_livres * TITRE_S;
+
+    // char **datagrammes = malloc(n * sizeof(char *));
+    // uint8_t *val = calloc(n, sizeof(uint8_t));
+
+    // for (size_t l = 0; l < nb_livres; ++l)
+    // {
+
+    // }
+
+
+    // free(dg_send);
+    // free(val);
 }
 
 
@@ -105,7 +121,7 @@ int main(int argc, char *argv[])
 
     int nb_livres = argc - 3;
 
-    envoyer_requete(argv[1], argv[2], nb_livres, &argv[3]);
+    gerer_requete(argv[1], argv[2], nb_livres, &argv[3]);
 
     return 0;
 }

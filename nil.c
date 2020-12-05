@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <netinet/in.h>
@@ -32,14 +31,14 @@ time_t delai;
 
 void usage (char *argv0)
 {
-    fprintf (stderr, "usage: %s port délai librairie port ...\n", argv0) ;
-    exit (1) ;
+    fprintf(stderr, "usage: %s port délai librairie port ...\n", argv0);
+    exit(1);
 }
 
 void raler_log (char *msg)
 {
-    syslog (LOG_ERR, "%s: %m", msg) ;
-    exit (1) ;
+    syslog(LOG_ERR, "%s: %m", msg);
+    exit(1);
 }
 
 
@@ -68,15 +67,15 @@ void traiter_retour(int s, struct commande *cm)
     switch (af)
     {
     case AF_INET :
-        nadr = & ((struct sockaddr_in *) &sonadr)->sin_addr ;
+        nadr = &((struct sockaddr_in *) &sonadr)->sin_addr;
         type = IPv4;
-        no_port = & ((struct sockaddr_in *) &sonadr)->sin_port ;
-        break ;
+        no_port = &((struct sockaddr_in *) &sonadr)->sin_port;
+        break;
     case AF_INET6 :
-        nadr = & ((struct sockaddr_in6 *) &sonadr)->sin6_addr ;
+        nadr = &((struct sockaddr_in6 *) &sonadr)->sin6_addr;
         type = IPv6;
-        no_port = & ((struct sockaddr_in6 *) &sonadr)->sin6_port ;
-        break ;
+        no_port = &((struct sockaddr_in6 *) &sonadr)->sin6_port;
+        break;
     }
 
     char *nadr_;
@@ -169,9 +168,9 @@ void broadcast_lib(const struct annuaire an, const char *dg, const int len)
             sadr6->sin6_port = port;
             salong = sizeof *sadr6;
         }
-        else if (inet_pton(AF_INET6, an.librairies[l], &sadr4->sin_addr) == 1)
+        else if (inet_pton(AF_INET, an.librairies[l], &sadr4->sin_addr) == 1)
         {
-            family = PF_INET ;
+            family = PF_INET;
             sadr4->sin_family = AF_INET;
             sadr4->sin_port = port;
             salong = sizeof *sadr4;
@@ -221,8 +220,8 @@ int traiter_requete_client(int in, const uint32_t no_commande, char **dg)
     printf("\nrecu commande client %d, ", no_commande);
     printf("nb d'octers lus = %d\n", r);
 
-    u_int16_t nb_livres = *(u_int16_t *) buf;
-    u_int16_t n_l = ntohs(nb_livres);
+    uint16_t nb_livres = *(uint16_t *) buf;
+    uint16_t n_l = ntohs(nb_livres);
 
     printf("Nb livres : %d\n", ntohs(nb_livres));
 
@@ -237,7 +236,7 @@ int traiter_requete_client(int in, const uint32_t no_commande, char **dg)
     // numéro de commande
     *(uint32_t *) *dg = htons(no_commande);
     // nombre de livres
-    *(u_int16_t *) &(*dg)[ID_S] = nb_livres;
+    *(uint16_t *) &(*dg)[ID_S] = nb_livres;
     // titres des livres
     int ind = 6, ind_buf = 2;
     for (int i=0; i<n_l; ++i)
@@ -326,7 +325,7 @@ void demon(char *serv, const struct annuaire an)
             sadr6->sin6_port = port;
             salong = sizeof *sadr6;
         }
-        else if (inet_pton(AF_INET6, an.librairies[l], &sadr4->sin_addr) == 1)
+        else if (inet_pton(AF_INET, an.librairies[l], &sadr4->sin_addr) == 1)
         {
             family = PF_INET ;
             sadr4->sin_family = AF_INET;
@@ -438,7 +437,6 @@ void demon(char *serv, const struct annuaire an)
 
         // on regarde si un délai des commandes est arrivé à expiration
         tester_delai(&cm);
-
     }
 }
 
