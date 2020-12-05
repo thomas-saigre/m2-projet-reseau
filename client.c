@@ -10,6 +10,7 @@
 #include "raler.h"
 
 #define TITRE_S   10
+#define MAX_LEN   1024
 
 void usage (char *argv0)
 {
@@ -29,8 +30,13 @@ void envoyer_requete(const char *serveur, const char *port,
 {
     int err;
 
-    const int taile_dg = 2 + n*TITRE_S;
-    char *datagramme = calloc(taile_dg, sizeof(char));
+    const int taille_dg = 2 + n*TITRE_S;
+
+    // on peut commander au plus 102 livres (donc c'est large)
+    if (taille_dg > MAX_LEN)
+        raler(0, "Trop de commandes");
+
+    char *datagramme = calloc(taille_dg, sizeof(char));
 
     *(uint16_t *) datagramme = htons(n);
     int i_dg = 2;
@@ -70,10 +76,20 @@ void envoyer_requete(const char *serveur, const char *port,
     }
     if (s == -1) raler(0, "Erreur : %s", cause);
     freeaddrinfo(res0);
+
     
     printf("Envoi requête à %s/%s\n", serveur, port);
-    err = write(s, datagramme, taile_dg);
+    err = write(s, datagramme, taille_dg);
     if (err == -1) raler(1, "Échec envoi requête");
+
+
+    char buf_rep[MAX_LEN];
+    printf("\nAttente réponse\n");
+    err = read(s, buf_rep, MAX_LEN);
+    if (err == -1) raler(1, "read");
+
+    printf("Réponse reçue, nb octets lus %d\n", err);
+    printf("\t%s\n", buf_rep);
 
     close(s);
 

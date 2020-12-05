@@ -22,6 +22,9 @@
 #define REPONSE_S       29
 #define MAXSOCK         64
 #define MAXLEN          1024
+#define IPv4            4
+#define IPv6            6
+#define IP_S            16
 
 #define CHK(v) do{if((v)==-1)raler(1,#v);} while(0)
 
@@ -66,12 +69,12 @@ void traiter_retour(int s, struct commande *cm)
     {
     case AF_INET :
         nadr = & ((struct sockaddr_in *) &sonadr)->sin_addr ;
-        type = 4;
+        type = IPv4;
         no_port = & ((struct sockaddr_in *) &sonadr)->sin_port ;
         break ;
     case AF_INET6 :
         nadr = & ((struct sockaddr_in6 *) &sonadr)->sin6_addr ;
-        type = 6;
+        type = IPv6;
         no_port = & ((struct sockaddr_in6 *) &sonadr)->sin6_port ;
         break ;
     }
@@ -96,7 +99,7 @@ void traiter_retour(int s, struct commande *cm)
 
     for (int i=0; i<nb_livres; ++i)
     {
-        printf("Commande %d, traitement livre %d/%d\n", no_commande, i, nb_livres);
+        printf("Commande %d, traitement livre %d/%d\n", no_commande, i+1, nb_livres);
         // on recopie le titre du livre
         // for (o=0; o<TITRE_S; ++o)
         //     dg[ind + o] = buf[6 + i*TITRE_S + o];
@@ -105,18 +108,14 @@ void traiter_retour(int s, struct commande *cm)
         dg[ind + TITRE_S] = type;
         switch (type)
         {
-        case 4:
-            // for (o=0; o<4; ++o)
-            //     dg[ind + TITRE_S + 1 + o] = nadr_[o];
+        case IPv4:
             memcpy(&dg[ind + TITRE_S + 1], nadr_, 4);
-            // for(; o<16; ++o)
-            //     dg[ind + TITRE_S + 1 + o] = 0;
             memset(&dg[ind + TITRE_S + 5], 0, 12);
             break;
-        case 6:
-            // for (o=0; o<16; ++o)
-            //     dg[ind + TITRE_S + 1 + o] = nadr_[o];
-            memcpy(&dg[ind + TITRE_S + 1], nadr_, 16);
+        case IPv6:
+            printf("IPv6 : ");
+            memcpy(&dg[ind + TITRE_S + 1], nadr_, IP_S);
+            printf("\n");
             break;
         default:
             raler(0,"Normalement, ce message n'apparaitra jamais !");
@@ -124,15 +123,16 @@ void traiter_retour(int s, struct commande *cm)
         }
         // enfin le port TCP de la librairie
         
-        *(uint16_t *) &dg[ind + TITRE_S + 1] = *no_port;
+        *(uint16_t *) &dg[ind + TITRE_S + 1 + IP_S] = *no_port;
+        // printf("%d %d", dg[ind + TITRE_S + 16 + 1], dg[ind + TI]);
         ind += REPONSE_S;
         
     }
+    // même si on a 0 livre dans le retour, il faut mettre à jour la commande
+    ajouter_commande(no_commande, nb_livres, dg,
+            taille_dg, cm);
+    CMD_DISP(cm);
 
-    if (nb_livres > 0)
-        CMD_ADD(no_commande, nb_livres, time(NULL) + delai, dg, taille_dg, cm);
-    else
-        printf("Aucune réponse de la librairie\n");
 }
 
 
@@ -188,7 +188,7 @@ void broadcast_lib(const struct annuaire an, const char *dg, const int len)
         // setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
 
 #ifdef DISP
-        printf("Lib %d addr %s port %d\n", l, an.librairies[l], an.ports[l]);
+        printf("\t>Lib %d addr %s port %d\n", l, an.librairies[l], an.ports[l]);
 #endif    
         r = sendto(an.sock[l], dg, len, 0, (struct sockaddr *) &sadr, salong);
         if (r == -1) raler(1, "send to");
@@ -211,14 +211,15 @@ void broadcast_lib(const struct annuaire an, const char *dg, const int len)
  */
 int traiter_requete_client(int in, const uint32_t no_commande, char **dg)
 {
-    int r, n = 0;
+    int r = 0;
     char buf[MAXLEN];
 
-
-    while ((r = read(in, buf, MAXLEN)) > 0)
-        n += r;
-    syslog(LOG_ERR, "nb d'octers lus = %d\n", n);
-    printf("nb d'octers lus = %d\n", n);
+    // toutes les données sont contenus dans un unique dg de taille MAX_LEN max
+    r = read(in, buf, MAXLEN);
+    if (r == -1) raler(1, "read");
+    syslog(LOG_ERR, "nb d'octers lus = %d\n", r);
+    printf("\nrecu commande client %d, ", no_commande);
+    printf("nb d'octers lus = %d\n", r);
 
     u_int16_t nb_livres = *(u_int16_t *) buf;
     u_int16_t n_l = ntohs(nb_livres);
@@ -371,7 +372,7 @@ void demon(char *serv, const struct annuaire an)
 
     uint32_t no_commande = 0;
     struct commande cm;
-    CMD_ZERO(an.nlib, &cm);
+    init_commande(an.nlib, &cm);
     printf("Au début :\n");
     CMD_DISP(&cm);
     printf("\n");
@@ -412,6 +413,9 @@ void demon(char *serv, const struct annuaire an)
                 no_commande++;
                 salong = sizeof sonadr;
                 sd = accept(s[i], (struct sockaddr *) &sonadr, &salong);
+
+                nouvelle_commande(no_commande, sd, time(NULL) + delai, &cm);
+                CMD_DISP(&cm);
 
                 char *dg = NULL;
                 int taille_dg;
