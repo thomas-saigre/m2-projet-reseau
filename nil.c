@@ -62,8 +62,8 @@ void traiter_retour(int s, struct commande *cm)
     char type;
 
     salong = sizeof sonadr ;
-    r = recvfrom(s, buf, MAXLEN, 0, (struct sockaddr *) &sonadr, &salong) ;
-    af = ((struct sockaddr *) &sonadr)->sa_family ;
+    r = recvfrom(s, buf, MAXLEN, 0, (struct sockaddr *) &sonadr, &salong);
+    af = ((struct sockaddr *) &sonadr)->sa_family;
     switch (af)
     {
     case AF_INET :
@@ -91,7 +91,7 @@ void traiter_retour(int s, struct commande *cm)
     int ind = 2;
     // int o;
 
-    inet_ntop (af, nadr, padr, sizeof padr);
+    inet_ntop(af, nadr, padr, sizeof padr);
 #ifdef DISP
     printf ("%s: nb d'octets lus = %d\n", padr, r);
 #endif
@@ -475,7 +475,6 @@ int main(int argc, char *argv[])
     umask(0);   // initialise le masque binaire
     openlog("exemple", LOG_PID | LOG_CONS, LOG_DAEMON);
     demon(serv, an);
-    exit(1);
 
 
     free_annuaire(&an);

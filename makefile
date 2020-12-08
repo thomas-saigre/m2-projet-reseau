@@ -19,8 +19,8 @@ librarie: librarie.o stock.o raler.o
 nil: nil.o raler.o annuaire.o commande.o
 	$(CC) nil.o raler.o annuaire.o commande.o -o nil
 
-client: client.o raler.o
-	$(CC) client.o raler.o -o client
+client: client.o raler.o retour.o
+	$(CC) client.o raler.o retour.o -o client
 
 
 
@@ -41,6 +41,9 @@ librarie.o: librarie.c
 
 raler.o: raler.c
 	$(CC) raler.c $(CFLAGS) $(DEBUG)
+
+retour.o: retour.c
+	$(CC) retour.c $(CFLAGS) $(DEBUG)
 
 stock.o: stock.c
 	$(CC) stock.c $(CFLAGS) $(DEBUG)
