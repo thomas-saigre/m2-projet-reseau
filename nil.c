@@ -100,8 +100,6 @@ void traiter_retour(int s, struct commande *cm)
     {
         printf("Commande %d, traitement livre %d/%d\n", no_commande, i+1, nb_livres);
         // on recopie le titre du livre
-        // for (o=0; o<TITRE_S; ++o)
-        //     dg[ind + o] = buf[6 + i*TITRE_S + o];
         memcpy(&dg[ind], &buf[6 + i*TITRE_S], TITRE_S);
         // puis le type et l'adresse IP (v4 ou v6)
         dg[ind + TITRE_S] = type;
@@ -196,13 +194,10 @@ void broadcast_lib(const struct annuaire an, const char *dg, const int len)
 }
 
 
-
-
-
 /**
  * @brief Prépare les données à envoyer aux librairies
  * 
- * @param in
+ * @param in descripteur de la socket
  * @param no_commande numéro de commande
  * @param rep addresse du réperoitre des commandes
  * @param dg pointeur sur le datagramme à envoyer
@@ -310,8 +305,7 @@ void demon(char *serv, const struct annuaire an)
         struct sockaddr_storage sadr;
         struct sockaddr_in  *sadr4 = (struct sockaddr_in  *) &sadr;
         struct sockaddr_in6 *sadr6 = (struct sockaddr_in6 *) &sadr;
-        socklen_t salong;
-        int so, r, family, o;
+        int so, family, o;
 
 
         // Envoi du datagramme à la librarie l
@@ -323,14 +317,12 @@ void demon(char *serv, const struct annuaire an)
             family = PF_INET6;
             sadr6->sin6_family = AF_INET6;
             sadr6->sin6_port = port;
-            salong = sizeof *sadr6;
         }
         else if (inet_pton(AF_INET, an.librairies[l], &sadr4->sin_addr) == 1)
         {
             family = PF_INET ;
             sadr4->sin_family = AF_INET;
             sadr4->sin_port = port;
-            salong = sizeof *sadr4;
         }
         else
             raler(0, "adresse '%s' non reconnue\n", an.librairies[l]);
@@ -342,27 +334,14 @@ void demon(char *serv, const struct annuaire an)
         {
             o = 1 ;		/* pour Linux */
             setsockopt(s[nsock], IPPROTO_IPV6, IPV6_V6ONLY, &o, sizeof o);
-            (void) salong;
-            (void) r;
-            // r = bind(s[nsock], (struct sockaddr *) &sadr, salong);
-            // if (r == -1)
-            // {
-            //     cause = "bind";
-            //     close (s [nsock]);
-            // }
-            // else
-            // {
-                s[nsock] = so;
-                nsock++;
-                an.sock[l] = so;
-            // }
+            s[nsock] = so;
+            nsock++;
+            an.sock[l] = so;
+
         }
     }
 
-
     if (nsock == nsock_tcp) raler(1, cause);
-
-
 
 
     // indice de la dernière case occupée
@@ -404,8 +383,8 @@ void demon(char *serv, const struct annuaire an)
         // requête d'un client
         for (i=0; i<nsock_tcp; ++i)
         {
-            struct sockaddr_storage sonadr ;
-            socklen_t salong ;
+            struct sockaddr_storage sonadr;
+            socklen_t salong;
 
             if (FD_ISSET(s[i], &readfds))
             {
@@ -441,21 +420,12 @@ void demon(char *serv, const struct annuaire an)
 }
 
 
-
-
-
-
-
-
-
 int main(int argc, char *argv[])
 {
     char *serv;
     if (argc < 3) usage(argv[0]);
     serv = argv[1];
     delai = (time_t) atoi(argv[2]);
-
-
 
     int narg = argc - 3;
     if (narg % 2 != 0)
@@ -467,15 +437,11 @@ int main(int argc, char *argv[])
     struct annuaire an;
     init_annuaire(nlib, &argv[3], &an);
 
-
-
-
     setsid();   // nouvelle session
     chdir("/"); // change le répertoire courant
     umask(0);   // initialise le masque binaire
     openlog("exemple", LOG_PID | LOG_CONS, LOG_DAEMON);
     demon(serv, an);
-
 
     free_annuaire(&an);
     return 0;

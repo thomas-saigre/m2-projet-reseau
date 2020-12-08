@@ -3,18 +3,24 @@
 
 #include <unistd.h>
 #include <inttypes.h>
+#include <sys/select.h>
 
-#define IP_S        16
-#define INIT_LIB    8
+#define IP_S       16
+#define INIT_LIB   8
+#define TITRE_S    10
+#define MAXSOCK    64
 
 struct retour
 {
-    int n;              // nombre de livres
+    int n;              // nombre maximal de livres
+    int current_ind;    // indice courant
     int nlib;           // nombre de librairies
-    
-    int *status;        // status du livre (-1 pas encore, 0 ok, sinon 1+ind)
-    char **datagrammes; // datagrammes à envoyer aux libraries
 
+    char **titre;       // titre du livre
+    int *ind;           // indice du livre dans le dg rep de nil
+    
+    char **datagrammes; // datagrammes à envoyer aux libraries
+    int *taille_dg;     // taille du dg à envoyer
     uint8_t *type;      // IPv 4 ou 6
     uint16_t *port;     // ports de chaque librarie
     char **Ip;          // adresse IP des librairies
@@ -53,7 +59,7 @@ int recherche_librairie(const char* addr,const uint16_t port,const uint8_t type,
  * @param ind_lib indice de la biliothèque
  * @param ret adresse du "retour"
  */
-void ajouter_livre(const char *titre, const int ind, const int ind_lib,
+void ajouter_livre(char *titre, const int ind, const int ind_lib,
         struct retour *ret);
 
 /**
@@ -67,6 +73,7 @@ int rechercher_livre(const char *titre, struct retour *ret);
 /**
  * @brief envoie les datagrammes aux librairies
  */
-void envoyer_dg(struct retour *ret);
+void envoyer_dg(fd_set *fd, int *max, int sockarray[MAXSOCK], int *nsock,
+        struct retour *ret);
 
 #endif

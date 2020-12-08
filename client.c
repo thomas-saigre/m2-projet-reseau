@@ -4,14 +4,21 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <syslog.h>
 #include "raler.h"
 #include "retour.h"
 
-#define TITRE_S   10
-#define MAX_LEN   1024
+#define TITRE_S    10
+#define REPONSE_S  29
+#define MAXLEN     1024
+#define MAXSOCK    64
+#define IPv4       4
+#define IPv6       6
 
 #define CHK(v) do{if((v)==-1)raler(1,#v);} while(0)
 
@@ -27,13 +34,21 @@ void usage (char *argv0)
  * @param titre titre du livre
  * @param dg datagramme réponse de nil
  * @param ind indice à partir duquel rechercher
- * @result indice si le livre y est  -1 sinon
+ * @result indice (dans le dg) si le livre y est, -1 sinon
  */
 int rechercher_dans_dg(const char *titre, const char *dg,
-        const int ind, const int max_livre)   // TODO
+        const int ind, const int max_livre)
 {
-
-    return -1;
+    int ind_liv = -1;
+    for (int i=ind+1; i<max_livre; ++i)
+    {
+        if (memcmp(titre, &dg[2 + i*REPONSE_S], TITRE_S) == 0)
+        {
+            ind_liv = 2 + i*REPONSE_S;
+            break;
+        }
+    }
+    return ind_liv;
 }
 
 /**
@@ -51,7 +66,7 @@ void gerer_requete(const char *serveur, const char *port_nil,
     const int taille_dg = 2 + n*TITRE_S;
 
     // on peut commander au plus 102 livres (donc c'est large)
-    if (taille_dg > MAX_LEN)
+    if (taille_dg > MAXLEN)
         raler(0, "Trop de commandes");
 
     char *datagramme = calloc(taille_dg, sizeof(char));
@@ -101,9 +116,9 @@ void gerer_requete(const char *serveur, const char *port_nil,
     if (err == -1) raler(1, "Échec envoi requête");
 
     // attente de la réponse
-    char buf_rep[MAX_LEN];
+    char buf_rep[MAXLEN];
     printf("\nAttente réponse\n");
-    err = read(s, buf_rep, MAX_LEN);
+    err = read(s, buf_rep, MAXLEN);
     if (err == -1) raler(1, "read");
 
     printf("Réponse reçue, nb octets lus %d\n", err);
@@ -121,6 +136,7 @@ void gerer_requete(const char *serveur, const char *port_nil,
 
     int a_envoyer = 0;
     int ind = 2, ind_lib, ind_livre;
+    int sd;
     char titre[TITRE_S + 1];
     titre[TITRE_S] = '\0';
     uint8_t type;
@@ -133,6 +149,7 @@ void gerer_requete(const char *serveur, const char *port_nil,
         memcpy(titre, &buf_rep[ind], TITRE_S);
 
         ind_livre = rechercher_livre(titre, &ret);
+        printf(">>>>> coucou\n");
         if (ind_livre == -1)    // si le livre n'est pas déjà dedans
         {
             type = *(uint8_t *) &buf_rep[ind + TITRE_S];
@@ -143,62 +160,99 @@ void gerer_requete(const char *serveur, const char *port_nil,
             ajouter_livre(titre, l, ind_lib, &ret);
             a_envoyer = 1;
         }
+        ind += TITRE_S;
     }
+
+    printf("ici \n");
 
     while (a_envoyer == 1)
     {
-        envoyer_dg(&ret);
+        fd_set readfds;
+        int sockarray[MAXSOCK];
+        int max, nsock;
+        FD_ZERO(&readfds);
+        envoyer_dg(&readfds, &max, sockarray, &nsock, &ret);
         a_envoyer = 0;
         
-        // select()         // TODO
-        for (;;)    // boucle avec fd_set TODO
+        if (select(max+1, &readfds, NULL, NULL, NULL) == -1)
         {
-            char rep_lib[MAX_LEN];
-            CHK(r = read(0, rep_lib, MAX_LEN)); // TODO read dans la socket
+            syslog(LOG_ERR, "%s: %m", "select");
+            exit(1);
+        }
+        for (int i=0; i<nsock; ++i)
+        {
+            struct sockaddr_storage sonadr;
+            socklen_t salong;
+            void *nadr;
+            uint16_t *no_port;
+            int af;
+            char padr[INET6_ADDRSTRLEN];
 
-            uint16_t nb_ret = 0;    // TODO nb de retour du db de la lib
-            uint8_t rep;
-            for (int l=0; l<nb_ret; ++l)
+            if (FD_ISSET(sockarray[i], &readfds))
             {
-                rep = 0;    // TODO status du livre dans la réponse
-                if (rep == 0)
-                {
-                    int ind_liv = rechercher_livre("", &ret);   // TODO titre
-                    int ind_dg = rechercher_dans_dg("", buf_rep, ind_liv, max_livre);
+                char rep_lib[MAXLEN];
 
-                    if (ind_dg == -1)
+                sd = accept(sockarray[i], (struct sockaddr *) &sonadr, &salong);
+                r = recvfrom(sd, rep_lib, MAXLEN, 0, (struct sockaddr *) &sonadr, &salong);
+                af = ((struct sockaddr *) &sonadr)->sa_family;
+                uint8_t type;
+                switch (af)
+                {
+                case AF_INET :
+                    nadr = &((struct sockaddr_in *) &sonadr)->sin_addr;
+                    type = IPv4;
+                    no_port = &((struct sockaddr_in *) &sonadr)->sin_port;
+                    break;
+                case AF_INET6 :
+                    nadr = &((struct sockaddr_in6 *) &sonadr)->sin6_addr;
+                    type = IPv6;
+                    no_port = &((struct sockaddr_in6 *) &sonadr)->sin6_port;
+                    break;
+                }
+                char *adr_;
+                adr_ = nadr;
+
+                uint16_t nb_ret = recherche_librairie(nadr, *no_port, type,
+                                    &ret);
+                uint8_t rep;
+                ind = 2;
+                for (int l=0; l<nb_ret; ++l)
+                {
+                    rep = *(uint8_t *) &buf_rep[ind + TITRE_S + l*(TITRE_S+1)];
+                    if (rep == 0)   // le livre n'a pas été commandé
                     {
-                        printf("!! non disponible\n");  // TODO titre
+                        memcpy(titre, &rep_lib[ind], TITRE_S);
+                        int ind_liv = rechercher_livre(titre, &ret);
+                        int ind_dg = rechercher_dans_dg(titre, buf_rep,
+                                        ind_liv, max_livre);
+
+                        if (ind_dg == -1)
+                        {
+                            printf("%s non disponible\n", titre);
+                        }
+                        else
+                        {
+                            type = *(uint8_t *) &buf_rep[ind_dg + TITRE_S];
+                            memcpy(IP, &buf_rep[ind + TITRE_S + 1], IP_S);
+                            port = *(uint16_t *) &buf_rep[ind_dg + TITRE_S + 1 + IP_S];
+                            
+                            ind_lib = recherche_librairie(IP, port, type, &ret);
+                            ajouter_livre(titre, ind_dg, ind_lib, &ret);
+                            a_envoyer = 1;
+                        }            
                     }
                     else
                     {
-                        ajouter_livre("", ind_dg, 0, &ret);    // TODO titre + ind_lib
-                        a_envoyer = 1;
+                        inet_ntop(af, nadr, padr, sizeof padr);
+                        printf("%s commandé sur %s/%hn\n",titre, adr_, no_port);
                     }
-                    
-                }
-                else
-                {
-                    printf("!! commandé sur ::1 9001\n");   // TODO tire + ip+port
-                }
-                
+                    ind += TITRE_S + 1;
+            }
             }
         }
     }
 
-    // size_t size_dg = 2 + nb_livres * TITRE_S;
-
-    // char **datagrammes = malloc(n * sizeof(char *));
-    // uint8_t *val = calloc(n, sizeof(uint8_t));
-
-    // for (size_t l = 0; l < nb_livres; ++l)
-    // {
-
-    // }
-
-
-    // free(dg_send);
-    // free(val);
+    free_retour(&ret);
 }
 
 
