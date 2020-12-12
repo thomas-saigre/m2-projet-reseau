@@ -5,6 +5,13 @@
 #include <stdio.h>
 #include <arpa/inet.h>
 
+#define IPv4    4
+#define IPv6    6
+#define IPv4LEN 32
+#define IPv6LEN 128
+
+#define CHK(v) do{if((v)==-1)raler(1,#v);} while(0)
+
 void init_retour(const int n, struct retour *ret)
 {
     ret->n = n;
@@ -42,8 +49,23 @@ void init_retour(const int n, struct retour *ret)
         ret->Ip[i] = malloc(IP_S * sizeof(char));
         if (ret->Ip[i] == NULL) raler(0, "Malloc");
     }
+}
 
-
+void disp(const struct retour *ret)
+{
+    printf("Livres (%d)\n", ret->n);
+    for (int i=0; i<ret->n; ++i)
+    {
+        printf("%d : %d '%s'\n", i, ret->ind[i], ret->titre[i]);
+    }
+    printf("\nLibrairies (%d)\n", ret->nlib);
+    for (int i = 0; i < ret->nlib; ++i)
+    {
+        printf("%d : %p %d %d -", i, ret->datagrammes[i], ret->type[i], ret->port[i]);
+        for (int k=0; k<16; ++k)
+            printf("%d ", ret->Ip[i][k]);
+        printf("\n");
+    }
 }
 
 void free_retour(struct retour *ret)
@@ -86,6 +108,7 @@ int recherche_librairie(const char* addr,const uint16_t port,const uint8_t type,
         {
             memcpy(ret->Ip[ind_libre], addr, IP_S);
             ret->port[ind_libre] = port;
+            ret->type[ind_libre] = type;
             return ind_libre;
         }
         else                // sinon on rajoute une case
@@ -167,14 +190,59 @@ int rechercher_livre(const char *titre, struct retour *ret)
     return ind;
 }
 
-void envoyer_dg(fd_set *fd, int *max, int s[MAXSOCK], int *nsock,
+void envoyer_dg(fd_set *fd, int *max, int so[MAXSOCK], int *nsock,
         struct retour *ret)
 {
-    // TODO
-    // faire le FD_SET et if s > max
-    (void) max;
-    (void) fd;
-    (void) ret;
-    (void) nsock;
-    (void) s;
+    // on ouvre une socket par librairie
+    for (int l=0; l<ret->nlib; ++l)
+    {
+        struct sockaddr_storage ladr;
+        memset(&ladr, 0, sizeof(ladr));
+        struct sockaddr_in *ladr4 = (struct sockaddr_in *)&ladr;
+        struct sockaddr_in6 *ladr6 = (struct sockaddr_in6 *)&ladr;
+        int s, family, r, err;
+        socklen_t llong;
+        printf("%d\n", ret->type[l]);
+        switch (ret->type[l])
+        {
+        case IPv4:
+            memcpy(&ladr4->sin_addr, ret->Ip[l], IPv4LEN);
+            family = AF_INET;
+            ladr4->sin_family = AF_INET;
+            ladr4->sin_port = ret->port[l];
+            llong = sizeof(*ladr4);
+            break;
+        case IPv6:
+            memcpy(&ladr6->sin6_addr, ret->Ip[l], IPv6LEN);
+            family = AF_INET6;
+            ladr6->sin6_family = AF_INET6;
+            ladr6->sin6_port = ret->port[l];
+            llong = sizeof(*ladr6);
+            break;
+        default:
+            printf("Normalement, ce message n'apparait pas !\n");
+            exit(1);
+            break;
+        }
+        CHK(s = socket(family, SOCK_STREAM, 0));
+        r = connect(s, (struct sockaddr *) &ladr, llong);
+        if (r == -1)
+        {
+            CHK(close(s));
+            raler(1, "connect");
+        }
+
+        printf("Commande à la librairie %d\n", l);
+        err = write(s, ret->datagrammes[l], ret->taille_dg[l]);
+        if (err == -1)
+            raler(1, "write");
+        free(ret->datagrammes[l]);
+        *nsock = *nsock + 1;
+
+        FD_SET(s, fd);
+        if (s > *max)
+            *max = s;
+
+        so[l] = s;    
+    }
 }

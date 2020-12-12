@@ -154,7 +154,7 @@ void gerer_requete(const char *serveur, const char *port_nil,
         {
             type = *(uint8_t *) &buf_rep[ind + TITRE_S];
             memcpy(IP, &buf_rep[ind + TITRE_S + 1], IP_S);
-            port = *(uint16_t *) &buf_rep[ind + TITRE_S + 1 + IP_S];
+            port = ntohs(*(uint16_t *) &buf_rep[ind + TITRE_S + 1 + IP_S]);
             
             ind_lib = recherche_librairie(IP, port, type, &ret);
             ajouter_livre(titre, l, ind_lib, &ret);
@@ -164,12 +164,13 @@ void gerer_requete(const char *serveur, const char *port_nil,
     }
 
     printf("ici \n");
+    disp(&ret);
 
     while (a_envoyer == 1)
     {
         fd_set readfds;
         int sockarray[MAXSOCK];
-        int max, nsock;
+        int max, nsock = 0;
         FD_ZERO(&readfds);
         envoyer_dg(&readfds, &max, sockarray, &nsock, &ret);
         a_envoyer = 0;
@@ -247,7 +248,7 @@ void gerer_requete(const char *serveur, const char *port_nil,
                         printf("%s commandé sur %s/%hn\n",titre, adr_, no_port);
                     }
                     ind += TITRE_S + 1;
-            }
+                }
             }
         }
     }

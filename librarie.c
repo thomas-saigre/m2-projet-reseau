@@ -180,9 +180,7 @@ int main(int argc, char *argv[])
     r = getaddrinfo (NULL, serv,  &hints, &res0) ;
 
     if (r != 0)
-    {
         raler(0, "geteddrinfo: %s\n", gai_strerror(r));
-    }
 
     // ouverture des sockets UDP depuis nil
     nsock = 0;

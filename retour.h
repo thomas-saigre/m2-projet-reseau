@@ -34,6 +34,8 @@ struct retour
  */
 void init_retour(const int n, struct retour *ret);
 
+void disp(const struct retour *);
+
 /**
  * @brief libère la mémoire
  */
