@@ -81,10 +81,10 @@ void gerer_requete(const char *serveur, const char *port_nil,
     }
 // Client <-> Nil
     // ouverture de la connection TCP vers nil
-    struct addrinfo hints, *res, *res0 ;
+    struct addrinfo hints, *res, *res0;
     memset(&hints, 0, sizeof hints);
-    hints.ai_family = PF_UNSPEC ;
-    hints.ai_socktype = SOCK_STREAM ;
+    hints.ai_family = PF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
 
     int r = getaddrinfo(serveur, port_nil, &hints, &res0);
     if (r != 0) raler(0, "getaddrinfo: %s\n", gai_strerror(r));

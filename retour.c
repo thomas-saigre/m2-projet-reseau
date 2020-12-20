@@ -4,6 +4,11 @@
 #include <string.h>
 #include <stdio.h>
 #include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+
+
 
 #define IPv4    4
 #define IPv6    6
@@ -196,6 +201,56 @@ void envoyer_dg(fd_set *fd, int *max, int so[MAXSOCK], int *nsock,
     // on ouvre une socket par librairie
     for (int l=0; l<ret->nlib; ++l)
     {
+        int af, r;
+        char padr[INET6_ADDRSTRLEN], port[6];
+        snprintf(port, 6, "%d", ret->port[l]);
+        switch (ret->type[l])
+        {
+        case IPv4:
+            af = AF_INET;
+            break;
+        case IPv6:
+            af = AF_INET6;
+            break;
+        default:
+            printf("Normalement, ce message n'apparait pas ! type=%d\n", af);
+            break;
+        }
+        inet_ntop(af, ret->Ip[l], padr, sizeof(padr));
+
+        struct addrinfo hints, *res, *res0;
+        memset(&hints, 0, sizeof hints);
+        hints.ai_family = PF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+
+        r = getaddrinfo(padr, port, &hints, &res0);
+        if (r != 0) raler(0, "getaddrinfo: %s\n", gai_strerror(r));
+
+        int s = -1;
+        char *cause;
+        for (res = res0; res != NULL; res = res->ai_next)
+        {
+            s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+            if (s == -1) cause = "socket";
+            else
+            {
+                r = connect(s, res->ai_addr, res->ai_addrlen);
+                if (r == -1)
+                {
+                    cause = "connect";
+                    raler(1, "coooepff");
+                    close(s);
+                    s = -1;
+                }
+                else break;
+            }
+            
+        }
+        if (s == -1) raler(0, "Erreur : %s", cause);
+        freeaddrinfo(res0);
+
+
+#if 0
         struct sockaddr_storage ladr;
         memset(&ladr, 0, sizeof(ladr));
         struct sockaddr_in *ladr4 = (struct sockaddr_in *)&ladr;
@@ -224,6 +279,32 @@ void envoyer_dg(fd_set *fd, int *max, int so[MAXSOCK], int *nsock,
             exit(1);
             break;
         }
+        printf("llong = %d\n", llong);
+        char *ip = inet_ntoa(ladr4->sin_addr);
+        struct sockaddr *lll = (struct sockaddr *) &ladr;
+
+
+
+        char *ssss = NULL;
+switch(lll->sa_family) {
+    case AF_INET: {
+        struct sockaddr_in *addr_in = (struct sockaddr_in *)lll;
+        ssss = malloc(INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &(addr_in->sin_addr), ssss, INET_ADDRSTRLEN);
+        break;
+    }
+    case AF_INET6: {
+        struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *)lll;
+        ssss = malloc(INET6_ADDRSTRLEN);
+        inet_ntop(AF_INET6, &(addr_in6->sin6_addr), ssss, INET6_ADDRSTRLEN);
+        break;
+    }
+    default:
+        break;
+}
+printf("IP address: %s\n", ssss);
+
+        printf("\n>>> %s; %d\n", ip, ladr4->sin_port);
         CHK(s = socket(family, SOCK_STREAM, 0));
         r = connect(s, (struct sockaddr *) &ladr, llong);
         if (r == -1)
@@ -231,10 +312,11 @@ void envoyer_dg(fd_set *fd, int *max, int so[MAXSOCK], int *nsock,
             CHK(close(s));
             raler(1, "connect");
         }
+#endif
 
         printf("Commande à la librairie %d\n", l);
-        err = write(s, ret->datagrammes[l], ret->taille_dg[l]);
-        if (err == -1)
+        r = write(s, ret->datagrammes[l], ret->taille_dg[l]);
+        if (r == -1)
             raler(1, "write");
         free(ret->datagrammes[l]);
         *nsock = *nsock + 1;

@@ -167,24 +167,60 @@ int main(int argc, char *argv[])
     init_stock(nb_livres, &argv[2], &lib);
 
 
-    // ouverture du serveur UDP, en attente des envois de Nil
-    int s[MAXSOCK], nsock, r, sd, opt = 1;
+    // ouverture du serveur TCP, en attente des envois des clients
+    int s[MAXSOCK], nsock, nsock_tcp, r, sd, opt = 1;
     struct addrinfo hints, *res, *res0 ;
     char *cause;
     char *serv = argv[1];
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = PF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+    if ((r = getaddrinfo(NULL, serv, &hints, &res0)) != 0)
+        raler(0, "getaddrinfo: %s\n", gai_strerror(r));
+
+    nsock = 0;
+    for (res = res0; res && nsock < MAXSOCK; res = res->ai_next)
+    {
+        s[nsock] = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        
+        if (s[nsock] == -1)
+            cause = "socket TCP";
+        else
+        {
+            setsockopt(s[nsock], IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof opt);
+            setsockopt(s[nsock], SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt);
+            r = bind(s[nsock], res->ai_addr, res->ai_addrlen);
+
+            if (r == -1)
+            {
+                cause = "bind TCP";
+                close(s[nsock]);
+            }
+            else
+            {
+                printf("TCP %d\n", s[nsock]);
+                listen(s[nsock], 5);
+                nsock++;
+            }
+        }
+    }
+    if (nsock == 0) raler_log(cause);
+    freeaddrinfo(res0);
+
+    nsock_tcp = nsock;
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = PF_UNSPEC ;
     hints.ai_socktype = SOCK_DGRAM ;
     hints.ai_flags = AI_PASSIVE ;
     r = getaddrinfo (NULL, serv,  &hints, &res0) ;
-
     if (r != 0)
         raler(0, "geteddrinfo: %s\n", gai_strerror(r));
 
     // ouverture des sockets UDP depuis nil
-    nsock = 0;
-    for (res=res0; res && nsock<MAXSOCK; res=res->ai_next)
+    for (res = res0; res && nsock < MAXSOCK; res = res->ai_next)
     {
         s[nsock] = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
         if (s[nsock] == -1)
@@ -198,42 +234,20 @@ int main(int argc, char *argv[])
             if (r == -1)
             {
                 cause = "bind";
+                // listen(s[nsock_tcp], 5);
                 close (s[nsock]);
             }
             else
+            {
+                printf("UDP %d\n", s[nsock]);
                 nsock++;
+            }
         }
     }
     if (nsock == 0) raler(1, cause);
-
-    // ouverture des sockets TCP depuis les clients
-    int nsock_tcp = nsock;
-    for (res = res0; res && nsock_tcp < MAXSOCK; res = res->ai_next)
-    {
-        s[nsock_tcp] = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-        
-        if (s[nsock_tcp] == -1)
-            cause = "socket TCP";
-        else
-        {
-            setsockopt(s[nsock_tcp], IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof opt);
-            setsockopt(s[nsock_tcp], SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt);
-            r = bind(s[nsock_tcp], res->ai_addr, res->ai_addrlen);
-
-            if (r == -1)
-            {
-                cause = "bind TCP";
-                close(s[nsock_tcp]);
-            }
-            else
-            {
-                listen(s[nsock_tcp], 5);
-                nsock_tcp++;
-            }
-        }
-    }
-    if (nsock_tcp == 0) raler_log(cause);
     freeaddrinfo(res0);
+
+   
 
     for (;;)
     {
@@ -247,27 +261,23 @@ int main(int argc, char *argv[])
             if (s[i] > max)
                 max = s[i];
         }
-        for (i=nsock; i<nsock_tcp; ++i)
-        {
-            FD_SET(s[i], &readfds);
-            if (s[i] > max)
-                max = s[i];
-        }
 
         if (select(max+1, &readfds, NULL, NULL, NULL) == -1)
             raler(0, "select");
 
-        for (i=0; i<nsock; ++i)
+        for (i = nsock_tcp; i < nsock; ++i)
         {
             if (FD_ISSET(s[i], &readfds))
                 traiter_commande(s[i], &lib);
         }
-        for (i=nsock; i<nsock_tcp; ++i)
+        for (i = 0; i < nsock; ++i)
         {
             struct sockaddr_storage sonadr;
             socklen_t salong;
-            void *nadr; uint16_t *no_port;
+            void *nadr;
+            uint16_t *no_port, port;
             int family;
+            char padr[INET6_ADDRSTRLEN];
             if (FD_ISSET(s[i], &readfds))
             {
                 salong = sizeof sonadr;
@@ -280,14 +290,22 @@ int main(int argc, char *argv[])
                 case AF_INET:
                     nadr = &((struct sockaddr_in *) &sonadr)->sin_addr;
                     no_port = &((struct sockaddr_in *) &sonadr)->sin_port;
+                    port = htons(*no_port);
                     break;
                 case AF_INET6:
                     nadr = &((struct sockaddr_in6 *) &sonadr)->sin6_addr;
                     no_port = &((struct sockaddr_in6 *) &sonadr)->sin6_port;
+                    port = htons(*no_port);
                     break;
                 }
-                char *nadr_ = nadr;
-                printf("Commande de %s/%hn\n", nadr_, no_port);
+                // char *nadr_ = nadr;
+                // uint16_t port = htons(*no_port);
+                printf("%d\n", port);
+                inet_ntop(family, nadr, padr, sizeof padr);
+                printf("Done\n");
+                printf("Commande de %s/\n", padr);
+                (void) no_port;
+                // printf("Commande de %s/%d\n", padr, *no_port);
                 
                 traiter_reservation(sd, &lib);
             }
