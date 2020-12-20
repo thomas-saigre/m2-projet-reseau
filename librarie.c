@@ -79,8 +79,9 @@ void traiter_commande(int s, struct stock *lib)
 
     for (int i=0; i<nb_livre; ++i)
     {
+        printf(">> indice : %d\n", ind);
         char titre[TITRE_S + 1];
-        memcpy(titre, &buf[ind], TITRE_S);
+        memcpy(titre, &buf[6 + i * TITRE_S], TITRE_S);
         titre[TITRE_S] = '\0';  // pour être sûr que ça se termine par \0
         ind_livre = est_disponible(titre, lib);
 
@@ -88,15 +89,14 @@ void traiter_commande(int s, struct stock *lib)
         {
             printf("%s disponible !\n", &lib->livres[ind_livre * TITRE_S]);
             n_dispo++;
-            snprintf(&dg_send[ind], TITRE_S,
-                     "%s", &lib->livres[ind_livre * TITRE_S]);
+            memcpy(&dg_send[ind], &lib->livres[ind_livre * TITRE_S], TITRE_S);
+
+            ind += TITRE_S;
         }
         else
         {
             printf("%s non disponible\n", titre);
         }
-        
-        ind += TITRE_S;
     }
     // on complmète le dg en ajoutant le nombre de livres
     *(uint16_t *) &dg_send[ID_S] = htons(n_dispo);
@@ -106,7 +106,7 @@ void traiter_commande(int s, struct stock *lib)
     int taille_dg = ID_S + NB_S + n_dispo*TITRE_S;
     r = sendto(s, dg_send, taille_dg, 0, (struct sockaddr *) &sonadr, salong);
     if (r == -1) raler(1, "sendto");
-    printf("Réponse envoyée !\n\n");
+    printf("Réponse envoyée ! (%d octets)\n\n", taille_dg);
 }
 
 /**
