@@ -7,8 +7,6 @@
 #define TITRE_S 10
 
 
-
-
 void free_stock(struct stock *st)
 {
     free(st->livres);

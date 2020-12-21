@@ -66,7 +66,8 @@ int rechercher_dans_dg(const char *titre, const char *dg,
  * @param recu status des livres
  * @param n nombre total de livres
  */
-int trouver_indice_du_livre(const char *titre, char *livre[], const int *recu, const int n)
+int trouver_indice_du_livre(const char *titre, char *livre[], const int *recu,
+        const int n)
 {
     int ind = -1;
     for (int i = 0; i < n; ++i)
@@ -184,13 +185,14 @@ void gerer_requete(const char *serveur, const char *port_nil,
     if (indices == NULL)
         raler(1, "malloc");
     memset(indices, -1, n*sizeof(int));
-    int nb_reponse = 0;                     // compteur du nombre de réponses reçues
-    int *recu = calloc(n, sizeof(int));     // booléens pour savie si le livre est traité définitivement
+    int nb_reponse = 0;                  // compteur du nombre de réponses
+    int *recu = calloc(n, sizeof(int));  // livre traité définitivement ou non
     if (recu == NULL)
         raler(1, "Calloc");
 
 
-    // Tant qu'on a pas eu de réponse (postive ou négative définitive) pour chaque livre
+    // Tant qu'on a pas eu de réponse (postive ou négative définitive)
+    //  pour chaque livre
     while (nb_reponse < n)
     {
         // On recherche la présence ou non des livres dans le dg_nil
@@ -200,12 +202,13 @@ void gerer_requete(const char *serveur, const char *port_nil,
             if (recu[l] == 0)
             {
                 // on recherche si le livre est dans la réponse
-                present = rechercher_dans_dg(livre[l], buf_rep, indices[l], max_livre);
+                present = rechercher_dans_dg(livre[l], buf_rep,
+                            indices[l], max_livre);
                 if (present == -1)
                 {
                     recu[l] = 1;
                     nb_reponse++;
-                    printf("Référence %s pas disponible\n", livre[l]);
+                    printf("%s non disponible\n", livre[l]);
                 }
                 else
                 {
@@ -213,7 +216,8 @@ void gerer_requete(const char *serveur, const char *port_nil,
                     indices[l] = present;
                     type = *(uint8_t *) &buf_rep[ind + TITRE_S];
                     memcpy(IP, &buf_rep[ind + TITRE_S + 1], IP_S);
-                    port = ntohs(*(uint16_t *) &buf_rep[ind + TITRE_S + 1 + IP_S]);
+                    port = ntohs(*(uint16_t *)
+                            &buf_rep[ind + TITRE_S + 1 + IP_S]);
 
                     ind_lib = recherche_librairie(IP, port, type, &ret);
                     ajouter_livre(livre[l], ind_lib, &ret);
@@ -224,107 +228,149 @@ void gerer_requete(const char *serveur, const char *port_nil,
         if (nb_reponse == n)    // pas besoin de continuer
             break;
 
-        // printf("On en est ici\n");
-        // disp(&ret);
 
-        // envoi des datagrammes aux librairies
-        fd_set readfds;
-        int max = 0, af;
-        FD_ZERO(&readfds);
-        envoyer_dg(&readfds, &max, &ret);
-
-        if (select(max+1, &readfds, NULL, NULL, NULL) == -1)
-        {
-            syslog(LOG_ERR, "%s: %m", "select");
-            exit(1);
-        }
-
-        
         char rep_lib[MAXLEN];
         memset(rep_lib, 0, MAXLEN);
-        for (int i = 0; i < ret.nlib; ++i)
+
+        // envoi des datagrammes aux librairies et reception de la réponse
+
+        // on ouvre une socket par librairie
+        for (int l = 0; l < ret.nlib; ++l)
         {
-            printf("sock tamere %d\n", ret.sock[i]);
-            if (ret.sock[i] != -1)  // si on a envoyé qqch sur cette socket
+            if (ret.taille_dg[l] > 0) // si il y a qqch à envoyer
             {
-
-                char padr[INET6_ADDRSTRLEN];
-                memset(padr, 0, INET6_ADDRSTRLEN);
-
-                if (FD_ISSET(ret.sock[i], &readfds))
+                int af, r;
+                char padr[INET6_ADDRSTRLEN], port[6];
+                snprintf(port, 6, "%d", ret.port[l]);
+                switch (ret.type[l])
                 {
-                    CHK(r = read(ret.sock[i], rep_lib, MAXLEN));
-                    CHK(close(ret.sock[i]));
-                    ret.sock[i] = -1;
-
-// #ifdef DISPLAY
-                    printf("DG reçu de la lib : ");
-                    for (int i=0; i<r; ++i)
-                        printf("%d ", rep_lib[i]);
-                    printf("\n");
-// #endif
-
-                    printf("%d octets reçus de la lib %d\t", r, i);
-
-
-                    uint16_t nb_ret = ntohs(*(uint16_t *) rep_lib);
-                    uint8_t rep;
-                    ind = 2;
-
-                    printf("(%d ref)\n", nb_ret);
-
-                    switch (ret.type[i])
-                    {
-                    case IPv4:
-                        af = AF_INET;
-                        break;
-                    case IPv6:
-                        af = AF_INET6;
-                        break;
-                    default:
-                        printf("Normalement, ce message n'apparait pas ! type=%d\n", ret.type[i]);
-                        break;
-                    }
-
-                    for (int l=0; l<nb_ret; ++l)
-                    {
-                        rep = *(uint8_t *) &rep_lib[ind + TITRE_S];
-                        memcpy(titre, &rep_lib[ind], TITRE_S);
-
-                        // printf("Livre %s, status %d\n", titre, (uint16_t) rep);
-
-                        // printf("livre %s :", titre);
-                        // for (int i=0; i<TITRE_S; ++i)
-                        //     printf("%d ", titre[i]);
-                        // printf("\n");
-                        switch (rep)
-                        {
-                        case 1:         // le livre a été commandé
-                            inet_ntop(af, ret.Ip[i], padr, sizeof(padr));
-                            printf("%s commandé sur %s/%d\n", titre, padr, ret.port[i]);
-                            nb_reponse++;
-                            ind_livre = trouver_indice_du_livre(titre, livre, recu, n);
-                            if (ind_livre == -1)
-                            {
-                                printf("En toute logique, ce message n'apparaîtra jamais\n");
-                            }
-                            recu[ind_livre] = 1;
-                            break;
-
-                        case 0:
-                            printf("%s non dispo, essai sur une autre lib\n", titre);
-                            break;
-                        
-                        default:
-                            printf("La magie noire vous aura ammené ici %d\n", rep);
-                            break;
-                        }
-
-                        ind += TITRE_S + 1;
-                    }
+                case IPv4:
+                    af = AF_INET;
+                    break;
+                case IPv6:
+                    af = AF_INET6;
+                    break;
+                default:
+                    printf("Normalement, ce message n'apparait pas ! type=%d\n",
+                           ret.type[l]);
+                    break;
                 }
-            }   // if sock != -1
-        }   // for i sur nlib
+                inet_ntop(af, ret.Ip[l], padr, sizeof(padr));
+
+                struct addrinfo hints, *res, *res0;
+                memset(&hints, 0, sizeof hints);
+                hints.ai_family = PF_UNSPEC;
+                hints.ai_socktype = SOCK_STREAM;
+
+                // printf("getaddrinfo vers %s/%s\n", padr, port);
+
+                r = getaddrinfo(padr, port, &hints, &res0);
+                if (r != 0) raler(0, "getaddrinfo: %s\n", gai_strerror(r));
+
+                int s = -1;
+                char *cause;
+                for (res = res0; res != NULL; res = res->ai_next)
+                {
+                    s = socket(res->ai_family, res->ai_socktype,
+                               res->ai_protocol);
+                    if (s == -1) cause = "socket";
+                    else
+                    {
+                        r = connect(s, res->ai_addr, res->ai_addrlen);
+                        if (r == -1)
+                        {
+                            cause = "connect";
+                            raler(1, "connect");
+                            close(s);
+                            s = -1;
+                        }
+                        else break;
+                    }
+                    
+                }
+                if (s == -1) raler(0, "Erreur : %s", cause);
+                freeaddrinfo(res0);
+
+#ifdef DISPLAY
+                printf("Commande à la librairie %d : ", l);
+                for (int i=0; i<ret->taille_dg[l]; ++i)
+                    printf("%d ", ret->datagrammes[l][i]);
+                printf("\n");
+#endif
+                r = write(s, ret.datagrammes[l], ret.taille_dg[l]);
+                if (r == -1)
+                    raler(1, "write");
+                free(ret.datagrammes[l]);
+                ret.datagrammes[l] = NULL;
+
+
+                // On attend la réponse dans la foulée
+                CHK(r = read(s, rep_lib, MAXLEN));
+                CHK(close(s));
+
+#ifdef DISPLAY
+                printf("DG reçu de la lib : ");
+                for (int i=0; i<r; ++i)
+                    printf("%d ", rep_lib[i]);
+                printf("\n");
+#endif
+
+
+
+                uint16_t nb_ret = ntohs(*(uint16_t *) rep_lib);
+                uint8_t rep;
+                ind = 2;
+
+                switch (ret.type[l])
+                {
+                case IPv4:
+                    af = AF_INET;
+                    break;
+                case IPv6:
+                    af = AF_INET6;
+                    break;
+                default:
+                    printf("Normalement, ce message n'apparait pas ! type=%d\n",
+                           ret.type[l]);
+                    break;
+                }
+
+                for (int liv = 0; liv < nb_ret; ++liv)
+                {
+                    rep = *(uint8_t *) &rep_lib[ind + TITRE_S];
+                    memcpy(titre, &rep_lib[ind], TITRE_S);
+
+                    switch (rep)
+                    {
+                    case 1:         // le livre a été commandé
+                        inet_ntop(af, ret.Ip[l], padr, sizeof(padr));
+                        printf("%s commandé sur %s/%d\n", titre, padr,
+                               ret.port[l]);
+                        nb_reponse++;
+                        ind_livre = trouver_indice_du_livre(titre,livre,recu,n);
+                        if (ind_livre == -1)
+                        {
+                            printf("En toute logique, ce message n'apparaîtra\
+                                   jamais\n");
+                        }
+                        recu[ind_livre] = 1;
+                        break;
+
+                    case 0:
+                        // on ne fait rien ici, ce sera de retour dans la boucle
+                        // principale qu'on va voir si on peut recommander le
+                        // livre ailleurs
+                        break;
+                    
+                    default:
+                        printf("La magie noire vous aura ammené ici %d\n", rep);
+                        break;
+                    }
+
+                    ind += TITRE_S + 1;
+                }   // for liv = 0 to nb_ret
+            }   // if dg != NULL
+        }   // for sur les librairies
     }   // while nb_reponse < n
 
     free(indices);
@@ -342,7 +388,7 @@ int main(int argc, char *argv[])
 
     gerer_requete(argv[1], argv[2], nb_livres, &argv[3]);
 
-    printf("FIN\n");
+    printf("\nFin\n");
 
     return 0;
 }

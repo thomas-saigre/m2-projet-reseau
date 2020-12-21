@@ -19,6 +19,7 @@ void init_commande(const int nlib, struct commande *cm)
     memset(cm->date_send, 0, CLIENT_MAX * sizeof(time_t));
     memset(cm->recus, 0, CLIENT_MAX * sizeof(int));
     memset(cm->datagrammes, 0, CLIENT_MAX * sizeof(char *));
+    // on n'alloue pas la mémoire des dg tout de suite car cela ferait beaucoup
 }
 
 void free_commande(struct commande *cm)
@@ -28,7 +29,7 @@ void free_commande(struct commande *cm)
             free(cm->datagrammes[i]);
 }
 
-void CMD_DISP(const struct commande *cm)
+void afficher_commande(const struct commande *cm)
 {
     printf("dg : ");
     for (int i=0; i<CLIENT_MAX; ++i)
@@ -59,8 +60,6 @@ void CMD_DISP(const struct commande *cm)
 void nouvelle_commande(const uint32_t no_commande, const int desc,
         const time_t date_envoi, struct commande *cm)
 {
-    printf("\n\nInitialisation d'une commande nouvelle %d\n", no_commande);
-    printf("\tExpiration à %ld\n", date_envoi);
     int ind = 0;
     while (ind < CLIENT_MAX && cm->used[ind] != 0)
         ind++;
@@ -79,7 +78,6 @@ void nouvelle_commande(const uint32_t no_commande, const int desc,
 void ajouter_commande(const uint32_t no_commande, const int nb_livres_new,
              char *dg, int len, struct commande *cm)
 {
-    printf("\nCMD_ADD : Réception pour commande %d\n", no_commande);
     int ind = 0;
     while (ind < CLIENT_MAX && cm->references[ind] != no_commande)
     {
@@ -89,9 +87,8 @@ void ajouter_commande(const uint32_t no_commande, const int nb_livres_new,
     if (ind == CLIENT_MAX)
         raler(0, "Erreur inexplicable dans CMD_ADD");
 
-    if (cm->taille_dg[ind] != 0) // si on a déjà commencé à remplir le datagramme
+    if (cm->taille_dg[ind] != 0) //si on a déjà commencé à remplir le datagramme
     {
-        printf("Déjà commencée %p\n", cm->datagrammes[ind]);
         int len_old = cm->taille_dg[ind];
         int new_len = len_old + len - 2;
         if (new_len > MAXLEN)
@@ -102,7 +99,6 @@ void ajouter_commande(const uint32_t no_commande, const int nb_livres_new,
         if (cm->datagrammes[ind] == NULL)
             raler(0, "Erreur realloc");
         
-        printf("%p\n", cm->datagrammes[ind]);
         nb_livres += nb_livres_new;
         *(uint16_t *) cm->datagrammes[ind] = htons(nb_livres);
 
@@ -110,28 +106,20 @@ void ajouter_commande(const uint32_t no_commande, const int nb_livres_new,
         free(dg);   // il faut libérer cette mémoire alloué dans ce cas
         
         cm->taille_dg[ind] = new_len;
-        printf("Nb reçus, av : %d   ", cm->recus[ind]);
         cm->recus[ind] += 1;
 
-        printf("TAILLE %d\n", cm->taille_dg[ind]);
 
         if (cm->recus[ind] == cm->nlib)
-        {
-            printf("On a tout reçu\n");
             envoyer_reponse(ind, cm);
-        }
     }
     else
     {
-        printf("Nouvelle commande\n");
         cm->references[ind] = no_commande;
         cm->taille_dg[ind] = len;
         cm->datagrammes[ind] = dg;
         cm->recus[ind] = 1;
-        printf("TAILLE %d\n", cm->taille_dg[ind]);
         if (cm->recus[ind] == cm->nlib)
         {
-            printf("C'est déjà la fin\n");
             envoyer_reponse(ind, cm);
         }
     }
@@ -147,8 +135,8 @@ void tester_delai(struct commande *cm)
         if (cm->used[i] != 0 && cm->date_send[i] < tps)
         {
             printf("Délai pour %d écoulé\n", cm->references[i]);
-            if (cm->taille_dg[i] == 0)  // si on n'a reçu aucune réponse, le gd n'existe pas encore
-            {
+            if (cm->taille_dg[i] == 0)  // si on n'a reçu aucune réponse,
+            {                           //  le dg n'existe pas encore
                 cm->datagrammes[i] = calloc(2, sizeof(char));
                 cm->taille_dg[i] = 2;
             }
@@ -161,7 +149,7 @@ void tester_delai(struct commande *cm)
 void envoyer_reponse(const int ind, struct commande *cm)
 {
     int r;
-    printf("Envoi réponse sur %d\n", cm->desc[ind]);
+    printf("Réponse envoyée au client\n\n");
     r = write(cm->desc[ind], cm->datagrammes[ind], cm->taille_dg[ind]);
     if (r == -1) raler(1, "write");
 

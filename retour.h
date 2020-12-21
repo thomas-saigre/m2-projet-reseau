@@ -21,7 +21,6 @@ struct retour
     uint8_t *type;      // IPv 4 ou 6
     uint16_t *port;     // ports de chaque librarie
     char **Ip;          // adresse IP des librairies
-    int *sock;          // descripteur de socket pour chaque lib
 };
 
 /**
@@ -32,7 +31,6 @@ struct retour
  */
 void init_retour(const int n, struct retour *ret);
 
-void disp(const struct retour *);
 
 /**
  * @brief libère la mémoire
@@ -71,9 +69,5 @@ void ajouter_livre(char *titre, const int ind_lib,
  */
 // int rechercher_livre(const char *titre, struct retour *ret);
 
-/**
- * @brief envoie les datagrammes aux librairies
- */
-void envoyer_dg(fd_set *fd, int *max, struct retour *ret);
 
 #endif

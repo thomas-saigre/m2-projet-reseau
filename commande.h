@@ -24,7 +24,10 @@ struct commande
  */
 void init_commande(const int nlib, struct commande *cm);
 
-void CMD_DISP(const struct commande *cm);
+/**
+ * @brief utilisée à des fins de déboguage
+ */
+void afficher_commande(const struct commande *cm);
 
 /**
  * @brief initialise la commande

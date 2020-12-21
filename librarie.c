@@ -39,28 +39,33 @@ void raler_log (char *msg)
 void traiter_commande(int s, struct stock *lib)
 {
     // réception du datagramme
-    struct sockaddr_storage sonadr ;
-    socklen_t salong ;
-    int r, af ;
-    void *nadr ;			/* au format network */
-    char padr [INET6_ADDRSTRLEN] ;	/* au format presentation */
-    char buf [MAXLEN] ;
+    struct sockaddr_storage sonadr;
+    socklen_t salong;
+    int r, af;
+    void *nadr;     			    // au format network
+    char padr [INET6_ADDRSTRLEN];	// au format presentation
+    char buf [MAXLEN];
+    uint16_t *no_port, port;
 
     salong = sizeof sonadr;
     r = recvfrom(s, buf, MAXLEN, 0, (struct sockaddr *) &sonadr, &salong);
+    if (r == -1) raler(1, "recvfrom");
     af = ((struct sockaddr *) &sonadr)->sa_family;
 
     switch (af)
     {
         case AF_INET:
-            nadr = & ((struct sockaddr_in *) &sonadr)->sin_addr ;
+            nadr = & ((struct sockaddr_in *) &sonadr)->sin_addr;
+            no_port = &((struct sockaddr_in *) &sonadr)->sin_port;
             break ;
         case AF_INET6 :
-            nadr = & ((struct sockaddr_in6 *) &sonadr)->sin6_addr ;
+            nadr = & ((struct sockaddr_in6 *) &sonadr)->sin6_addr;
+                    no_port = &((struct sockaddr_in6 *) &sonadr)->sin6_port;
             break ;
     }
     inet_ntop(af, nadr, padr, sizeof padr);
-    printf ("De nil %s: nb d'octets lus = %d\n", padr, r);
+    port = ntohs(*no_port);
+    printf ("Requete de nil %s/%d\n", padr, port);
 
     u_int32_t no_commande = *(u_int32_t *) buf;
     u_int16_t nb_livre = ntohs(*(u_int16_t *) &buf[4]);
@@ -86,7 +91,7 @@ void traiter_commande(int s, struct stock *lib)
 
         if (ind_livre != -1)
         {
-            printf("%s disponible !\n", &lib->livres[ind_livre * TITRE_S]);
+            printf("\t%s disponible\n", &lib->livres[ind_livre * TITRE_S]);
             n_dispo++;
             memcpy(&dg_send[ind], &lib->livres[ind_livre * TITRE_S], TITRE_S);
 
@@ -94,7 +99,7 @@ void traiter_commande(int s, struct stock *lib)
         }
         else
         {
-            printf("%s non disponible\n", titre);
+            printf("\t%s non disponible\n", titre);
         }
     }
     // on complmète le dg en ajoutant le nombre de livres
@@ -105,7 +110,7 @@ void traiter_commande(int s, struct stock *lib)
     int taille_dg = ID_S + NB_S + n_dispo*TITRE_S;
     r = sendto(s, dg_send, taille_dg, 0, (struct sockaddr *) &sonadr, salong);
     if (r == -1) raler(1, "sendto");
-    printf("Réponse envoyée ! (%d octets)\n\n", taille_dg);
+    printf("Réponse envoyée !\n\n");
 }
 
 /**
@@ -153,6 +158,7 @@ void traiter_reservation(int s, struct stock *lib)
     CHK(r = write(s, dg_send, taille_dg));
     printf("Confirmation client envoyée\n");
     afficher_stock(lib);
+    free(dg_send);
 }
 
 
@@ -165,6 +171,8 @@ int main(int argc, char *argv[])
     int nb_livres = argc - 2;
     struct stock lib;
     init_stock(nb_livres, &argv[2], &lib);
+
+    afficher_stock(&lib);
 
     uint16_t port_lib = atoi(argv[1]);
 
@@ -208,7 +216,7 @@ int main(int argc, char *argv[])
             }
             else
             {
-                printf("TCP %d\n", s[nsock]);
+                // printf("TCP %d\n", s[nsock]);
                 listen(s[nsock], 5);
                 nsock++;
             }
@@ -216,30 +224,8 @@ int main(int argc, char *argv[])
     }
     if (nsock == 0) raler_log(cause);
     freeaddrinfo(res0);
-/*
-    nsock = 0;
-    s[0] = socket(PF_INET6, SOCK_STREAM, 0);
-    if (s[0] == -1) raler(1, "socket");
-    nsock++;
-
-    printf("TCP : %d\n", s[0]);*/
 
     nsock_tcp = nsock;
-/*
-    r = setsockopt(s[0], IPPROTO_IPV6, IPV6_V6ONLY, &val, sizeof val);
-    setsockopt(s[nsock], SOL_SOCKET, SO_REUSEADDR, &val, sizeof val);
-    if (r == -1) raler(1, "setsockopt");
-
-    memset(&monadr, 0, sizeof monadr);
-    monadr.sin6_family = AF_INET6;
-    monadr.sin6_port = htons(port_lib);
-    monadr.sin6_addr = in6addr_any;
-
-    r = bind(s[0], (struct sockaddr *) &monadr, sizeof monadr);
-    if (r == -1) raler(1, "bind");
-
-    r = listen(s[0], 5);
-    if (r == -1) raler(1, "listen");*/
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = PF_UNSPEC ;
@@ -264,20 +250,17 @@ int main(int argc, char *argv[])
             if (r == -1)
             {
                 cause = "bind";
-                // listen(s[nsock_tcp], 5);
                 close (s[nsock]);
             }
             else
             {
-                printf("UDP %d\n", s[nsock]);
+                // printf("UDP %d\n", s[nsock]);
                 nsock++;
             }
         }
     }
     if (nsock == 0) raler(1, cause);
     freeaddrinfo(res0);
-
-   
 
     for (;;)
     {
@@ -312,7 +295,6 @@ int main(int argc, char *argv[])
             {
                 salong = sizeof sonadr;
                 sd = accept(s[i], (struct sockaddr *) &sonadr, &salong);
-                printf("sd : %d\n", sd);
                 if (sd == -1) raler(1, "accept");
 
                 family = ((struct sockaddr *) &sonadr)->sa_family ;
@@ -331,10 +313,11 @@ int main(int argc, char *argv[])
                     break;
                 }
                 inet_ntop(family, nadr, padr, sizeof padr);
-                printf("Done\n");
                 printf("Commande de %s/%d\n", padr, port);
                 
                 traiter_reservation(sd, &lib);
+
+                CHK(close(sd));
             }
         }
     }

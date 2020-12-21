@@ -13,7 +13,6 @@
 #include "commande.h"
 #include <sys/time.h>
 
-#define DISP
 
 #define TITRE_S         10
 #define ID_S            4
@@ -51,18 +50,19 @@ void raler_log (char *msg)
  */
 void traiter_retour(int s, struct commande *cm)
 {
-    printf("\nRetour commande\n");
+    printf("Retour commande\n");
     struct sockaddr_storage sonadr ;
     socklen_t salong ;
     int r, af ;
-    void *nadr;			        /* au format network */
+    void *nadr;			            // au format network
     uint16_t *no_port;
-    char padr [INET6_ADDRSTRLEN] ;	/* au format presentation */
+    char padr [INET6_ADDRSTRLEN] ;	// au format presentation
     char buf [MAXLEN] ;
     char type;
 
     salong = sizeof sonadr ;
     r = recvfrom(s, buf, MAXLEN, 0, (struct sockaddr *) &sonadr, &salong);
+    if (r == -1) raler(1, "recvfrom");
     af = ((struct sockaddr *) &sonadr)->sa_family;
     switch (af)
     {
@@ -92,13 +92,10 @@ void traiter_retour(int s, struct commande *cm)
     // int o;
 
     inet_ntop(af, nadr, padr, sizeof padr);
-#ifdef DISP
-    printf ("%s: nb d'octets lus = %d\n", padr, r);
-#endif
+    printf ("\t> %s\n", padr);
 
     for (int i=0; i<nb_livres; ++i)
     {
-        printf("Commande %d, traitement livre %d/%d\n", no_commande, i+1, nb_livres);
         // on recopie le titre du livre
         memcpy(&dg[ind], &buf[6 + i*TITRE_S], TITRE_S);
         // puis le type et l'adresse IP (v4 ou v6)
@@ -110,9 +107,7 @@ void traiter_retour(int s, struct commande *cm)
             memset(&dg[ind + TITRE_S + 5], 0, 12);
             break;
         case IPv6:
-            printf("IPv6 : ");
             memcpy(&dg[ind + TITRE_S + 1], nadr_, IP_S);
-            printf("\n");
             break;
         default:
             raler(0,"Normalement, ce message n'apparaitra jamais !");
@@ -121,20 +116,17 @@ void traiter_retour(int s, struct commande *cm)
         // enfin le port TCP de la librairie
         *(uint16_t *) &dg[ind + TITRE_S + 1 + IP_S] = *no_port;
         
-        // printf("%d %d", dg[ind + TITRE_S + 16 + 1], dg[ind + TI]);
         ind += REPONSE_S;
-
-        printf(">>>>>>> PORT DE LA LIB :%d", ntohs(dg[ind + TITRE_S + 1 + IP_S]));
         
     }
     // même si on a 0 livre dans le retour, il faut mettre à jour la commande
     ajouter_commande(no_commande, nb_livres, dg,
             taille_dg, cm);
-    CMD_DISP(cm);
+#ifdef DISPLAY
+    afficher_commande(cm);
+#endif
 
 }
-
-
 
 
 /**
@@ -186,9 +178,7 @@ void broadcast_lib(const struct annuaire an, const char *dg, const int len)
         setsockopt(an.sock[l], SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
         // setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
 
-#ifdef DISP
-        printf("\t>Lib %d addr %s port %d\n", l, an.librairies[l], an.ports[l]);
-#endif    
+        printf("\t> Lib %d addr %s port %d\n", l, an.librairies[l], an.ports[l]);
         r = sendto(an.sock[l], dg, len, 0, (struct sockaddr *) &sadr, salong);
         if (r == -1) raler(1, "send to");
 
@@ -214,18 +204,14 @@ int traiter_requete_client(int in, const uint32_t no_commande, char **dg)
     r = read(in, buf, MAXLEN);
     if (r == -1) raler(1, "read");
     syslog(LOG_ERR, "nb d'octers lus = %d\n", r);
-    printf("\nrecu commande client %d, ", no_commande);
-    printf("nb d'octers lus = %d\n", r);
 
     uint16_t nb_livres = *(uint16_t *) buf;
     uint16_t n_l = ntohs(nb_livres);
 
-    printf("Nb livres : %d\n", ntohs(nb_livres));
 
     int necr;
     // datagramme à envoyer à toutes les libraries
     int taille_dg = ID_S + NB_S + n_l*TITRE_S;
-    printf("%d\n",taille_dg);
     *dg = calloc(taille_dg, sizeof(char));
     if (*dg == NULL)
         raler(0, "calloc");
@@ -239,6 +225,7 @@ int traiter_requete_client(int in, const uint32_t no_commande, char **dg)
     for (int i=0; i<n_l; ++i)
     {
         necr = snprintf(&(*dg)[ind], TITRE_S, "%s", &buf[ind_buf]);
+        printf("%s ", &(*dg)[ind]);
         if (necr > TITRE_S)
             raler(0, "nil : Titre %s trop long", &buf[ind_buf]);
         ind += TITRE_S;
@@ -274,14 +261,14 @@ void demon(char *serv, const struct annuaire an)
     nsock_tcp = 0;
     for (res = res0; res && nsock_tcp < MAXSOCK; res = res->ai_next)
     {
-        s[nsock_tcp] = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        s[nsock_tcp] = socket(res->ai_family,res->ai_socktype,res->ai_protocol);
         
         if (s[nsock_tcp] == -1)
             cause = "socket TCP";
         else
         {
-            setsockopt(s[nsock_tcp], IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof opt);
-            setsockopt(s[nsock_tcp], SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt);
+            setsockopt(s[nsock_tcp], IPPROTO_IPV6, IPV6_V6ONLY,&opt,sizeof opt);
+            setsockopt(s[nsock_tcp], SOL_SOCKET, SO_REUSEADDR,&opt,sizeof opt);
             r = bind(s[nsock_tcp], res->ai_addr, res->ai_addrlen);
 
             if (r == -1)
@@ -335,8 +322,8 @@ void demon(char *serv, const struct annuaire an)
         else
         {
             o = 1 ;		/* pour Linux */
-            setsockopt(s[nsock], IPPROTO_IPV6, IPV6_V6ONLY, &o, sizeof o);
             s[nsock] = so;
+            setsockopt(s[nsock], IPPROTO_IPV6, IPV6_V6ONLY, &o, sizeof o);
             nsock++;
             an.sock[l] = so;
 
@@ -345,7 +332,6 @@ void demon(char *serv, const struct annuaire an)
 
     if (nsock == nsock_tcp) raler(1, cause);
 
-
     // indice de la dernière case occupée
     // int nb_sock = nsock_tcp;
     // s = [tcp0, tcp1, ..., tcpNt, udp0, udp1, ..., udpNu]
@@ -353,10 +339,11 @@ void demon(char *serv, const struct annuaire an)
     uint32_t no_commande = 0;
     struct commande cm;
     init_commande(an.nlib, &cm);
-    printf("Au début :\n");
-    CMD_DISP(&cm);
-    printf("\n");
-    struct timeval attente;// = {1., 0};   // 0.5 sec d'attente pour le select
+    struct timeval attente;
+    int af;
+    void *nadr;
+    char padr[INET6_ADDRSTRLEN];
+    uint16_t *no_port;
     // attente d'une connexion d'un client
     for (;;)
     {
@@ -378,12 +365,12 @@ void demon(char *serv, const struct annuaire an)
                 max = s[i];
         }
 
+        // on attend au plus 1 seconde pour ensuite tester les délais dépassés
         attente.tv_sec = 1;
         attente.tv_usec = 0;
         if (select(max+1, &readfds, NULL, NULL, &attente) == -1)
             raler_log("select");
 
-        
         // requête d'un client
         for (i=0; i<nsock_tcp; ++i)
         {
@@ -396,12 +383,31 @@ void demon(char *serv, const struct annuaire an)
                 salong = sizeof sonadr;
                 sd = accept(s[i], (struct sockaddr *) &sonadr, &salong);
 
+                af = ((struct sockaddr *) &sonadr)->sa_family;
+                switch (af)
+                {
+                case AF_INET :
+                    nadr = &((struct sockaddr_in *) &sonadr)->sin_addr;
+                    no_port = &((struct sockaddr_in *) &sonadr)->sin_port;
+                    break;
+                case AF_INET6 :
+                    nadr = &((struct sockaddr_in6 *) &sonadr)->sin6_addr;
+                    no_port = &((struct sockaddr_in6 *) &sonadr)->sin6_port;
+                    break;
+                }
+                inet_ntop(af, nadr, padr, sizeof(padr));
+                uint16_t port = ntohs(*no_port);
+
+                printf("Requete %d de %s/%d pour ", no_commande, padr, port);
                 nouvelle_commande(no_commande, sd, time(NULL) + delai, &cm);
-                CMD_DISP(&cm);
+#ifdef DISPLAY
+                afficher_commande(&cm);
+#endif
 
                 char *dg = NULL;
                 int taille_dg;
                 taille_dg = traiter_requete_client(sd, no_commande, &dg);
+                printf("\n");
 
                 broadcast_lib(an, dg, taille_dg);
                 free(dg);
@@ -409,17 +415,15 @@ void demon(char *serv, const struct annuaire an)
         }
 
         // réponse d'une librairie
-        for (i=nsock_tcp; i<nsock; ++i)
+        for (i = nsock_tcp; i < nsock; ++i)
         {
             if (FD_ISSET(s[i], &readfds))
             {
                 traiter_retour(s[i], &cm);
-                CMD_DISP(&cm);
             }
         }
 
         // on regarde si un délai des commandes est arrivé à expiration
-        printf("Il est %ld\n", time(NULL));
         tester_delai(&cm);
     }
 }
