@@ -4,7 +4,7 @@
 CC = gcc
 CFLAGS = -c
 DEBUG = -Wall -Werror -Wextra
-SRC = librarie.c nil.c client.c
+SRC = librairie.c nil.c client.c
 EXEC = $(SRC:.c=)
 
 all: $(EXEC)
@@ -13,8 +13,8 @@ debug: DEBUG += -g
 debug: all
 
 
-librarie: librarie.o stock.o raler.o
-	$(CC) librarie.o stock.o raler.o -o librarie
+librarie: librairie.o stock.o raler.o
+	$(CC) librairie.o stock.o raler.o -o librarie
 
 nil: nil.o raler.o annuaire.o commande.o
 	$(CC) nil.o raler.o annuaire.o commande.o -o nil
@@ -36,8 +36,8 @@ commande.o: commande.c
 client.o: client.c
 	$(CC) client.c $(CFLAGS) $(DEBUG)
 
-librarie.o: librarie.c
-	$(CC) librarie.c $(CFLAGS) $(DEBUG)
+librairie.o: librairie.c
+	$(CC) librairie.c $(CFLAGS) $(DEBUG)
 
 raler.o: raler.c
 	$(CC) raler.c $(CFLAGS) $(DEBUG)
