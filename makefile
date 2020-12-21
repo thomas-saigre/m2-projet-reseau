@@ -13,8 +13,8 @@ debug: DEBUG += -g
 debug: all
 
 
-librarie: librairie.o stock.o raler.o
-	$(CC) librairie.o stock.o raler.o -o librarie
+librairie: librairie.o stock.o raler.o
+	$(CC) librairie.o stock.o raler.o -o librairie
 
 nil: nil.o raler.o annuaire.o commande.o
 	$(CC) nil.o raler.o annuaire.o commande.o -o nil
