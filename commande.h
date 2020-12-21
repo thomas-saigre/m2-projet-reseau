@@ -16,7 +16,7 @@ struct commande
     int desc[CLIENT_MAX];               // descripteur du client
     time_t date_send[CLIENT_MAX];       // date à laquelle le délai est dépassé
     int recus[CLIENT_MAX];              // nombre de réponses reçues
-    char *datagrammes[CLIENT_MAX];       // datagramme à envoyer au client
+    char *datagrammes[CLIENT_MAX];      // datagramme à envoyer au client
 };
 
 /**

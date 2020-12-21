@@ -15,15 +15,13 @@ struct retour
     int n;              // nombre maximal de livres
     int current_ind;    // indice courant
     int nlib;           // nombre de librairies
-
-    char **titre;       // titre du livre
-    int *ind;           // indice du livre dans le dg rep de nil
     
     char **datagrammes; // datagrammes à envoyer aux libraries
     int *taille_dg;     // taille du dg à envoyer
     uint8_t *type;      // IPv 4 ou 6
     uint16_t *port;     // ports de chaque librarie
     char **Ip;          // adresse IP des librairies
+    int *sock;          // descripteur de socket pour chaque lib
 };
 
 /**
@@ -62,7 +60,7 @@ int recherche_librairie(const char* addr,const uint16_t port,const uint8_t type,
  * @param ind_lib indice de la biliothèque
  * @param ret adresse du "retour"
  */
-void ajouter_livre(char *titre, const int ind, const int ind_lib,
+void ajouter_livre(char *titre, const int ind_lib,
         struct retour *ret);
 
 /**
@@ -71,12 +69,11 @@ void ajouter_livre(char *titre, const int ind, const int ind_lib,
  * @param titre titre du livre
  * @param ret adresse du "retour"
  */
-int rechercher_livre(const char *titre, struct retour *ret);
+// int rechercher_livre(const char *titre, struct retour *ret);
 
 /**
  * @brief envoie les datagrammes aux librairies
  */
-void envoyer_dg(fd_set *fd, int *max, int sockarray[MAXSOCK], int *nsock,
-        struct retour *ret);
+void envoyer_dg(fd_set *fd, int *max, struct retour *ret);
 
 #endif

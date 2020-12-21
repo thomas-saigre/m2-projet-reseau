@@ -23,14 +23,14 @@ void init_retour(const int n, struct retour *ret)
     ret->current_ind = 0;
     ret->nlib = INIT_LIB;
 
-    ret->ind = malloc(n * sizeof(int));
-    if (ret->ind == NULL) raler(0, "Malloc");
-    memset(ret->ind, -1, n * sizeof(int));
+    // ret->ind = malloc(n * sizeof(int));
+    // if (ret->ind == NULL) raler(0, "Malloc");
+    // memset(ret->ind, -1, n * sizeof(int));
 
-    ret->titre = malloc(n * sizeof(char *));
-    if (ret->titre == NULL) raler(0, "Malloc");
-    for (int i=0; i<n; ++i)
-        ret->titre[i] = "";
+    // ret->titre = malloc(n * sizeof(char *));
+    // if (ret->titre == NULL) raler(0, "Malloc");
+    // for (int i=0; i<n; ++i)
+    //     ret->titre[i] = "";
 
     ret->datagrammes = malloc(INIT_LIB * sizeof(char *));
     if (ret->datagrammes == NULL) raler(0, "Malloc");
@@ -42,31 +42,31 @@ void init_retour(const int n, struct retour *ret)
     
     ret->type = malloc(INIT_LIB * sizeof(uint8_t));
     if (ret->type == NULL) raler(0, "Malloc");
+    // type à -1 signifie qu'il n'y a rien à utiliser
+    memset(ret->type, -1, INIT_LIB * sizeof(uint8_t));
     
-    ret->port = malloc(INIT_LIB * sizeof(uint16_t));
+    ret->port = calloc(INIT_LIB, sizeof(uint16_t));
     if (ret->port == NULL) raler(0, "Malloc");
-    memset(ret->port, 0, INIT_LIB * sizeof(uint16_t));
     
     ret->Ip = malloc(INIT_LIB * sizeof(char *));
     if (ret->Ip == NULL) raler(0, "Malloc");
     for (int i=0; i<INIT_LIB; ++i)
     {
-        ret->Ip[i] = malloc(IP_S * sizeof(char));
+        ret->Ip[i] = calloc(IP_S, sizeof(char));
         if (ret->Ip[i] == NULL) raler(0, "Malloc");
     }
+
+    ret->sock = malloc(INIT_LIB * sizeof(int));
+    if (ret->sock == NULL) raler(1, "malloc");
+    memset(ret->sock, -1, INIT_LIB * sizeof(int));
 }
 
 void disp(const struct retour *ret)
 {
-    printf("Livres (%d)\n", ret->n);
-    for (int i=0; i<ret->n; ++i)
-    {
-        printf("%d : %d '%s'\n", i, ret->ind[i], ret->titre[i]);
-    }
     printf("\nLibrairies (%d)\n", ret->nlib);
     for (int i = 0; i < ret->nlib; ++i)
     {
-        printf("%d : %p %d %d -", i, ret->datagrammes[i], ret->type[i], ret->port[i]);
+        printf("%d : %p %d %d - IP ", i, ret->datagrammes[i], ret->type[i], ret->port[i]);
         for (int k=0; k<16; ++k)
             printf("%d ", ret->Ip[i][k]);
         printf("\n");
@@ -75,13 +75,14 @@ void disp(const struct retour *ret)
 
 void free_retour(struct retour *ret)
 {
-    free(ret->ind);
-    free(ret->titre);
+    // free(ret->ind);
+    // free(ret->titre);
     // on libère la mémoire des datagrammes au moment de l'envoi
     free(ret->datagrammes);
     free(ret->type);
     free(ret->port);
     free(ret->Ip);
+    free(ret->sock);
 }
 
 int recherche_librairie(const char* addr,const uint16_t port,const uint8_t type,
@@ -93,16 +94,24 @@ int recherche_librairie(const char* addr,const uint16_t port,const uint8_t type,
     // on recherche si on a déjà commencé un dg pour la librairie
     for (; ind<ret->nlib; ++ind)
     {
-        if ((memcmp(addr, ret->Ip[ind], IP_S) == 0) &&
+        // printf("%s\n", ret->Ip[ind]);//, ret->port[ind]);
+
+
+        if ((strncmp(addr, ret->Ip[ind], IP_S) == 0) &&
              port == ret->port[ind])
+        {
+            // printf("on passe par ici\n");
             break;
+        }
         if ((ret->port[ind] == 0) && (is_libre == 0))
         {
+            // printf("et par là\n");
             is_libre = 1;
             ind_libre = ind;
         }
     }
 
+    // printf("is_libre %d\n", is_libre);
     if (ind < ret->nlib)    // on a trouvé la librairie
     {
         return ind;
@@ -120,7 +129,7 @@ int recherche_librairie(const char* addr,const uint16_t port,const uint8_t type,
         {
             ret->nlib += 1;
 
-            ret->datagrammes = realloc(ret->Ip, ret->nlib * sizeof(char *));
+            ret->datagrammes = realloc(ret->datagrammes, ret->nlib * sizeof(char *));
             if (ret->datagrammes == NULL) raler(0, "realloc");
             ret->datagrammes[ret->nlib-1] = NULL;
 
@@ -137,6 +146,10 @@ int recherche_librairie(const char* addr,const uint16_t port,const uint8_t type,
             if (ret->type == NULL) raler(0, "realloc");
             ret->type[ret->nlib-1] = type;
 
+            ret->sock = realloc(ret->sock, ret->nlib * sizeof(int));
+            if (ret->sock == NULL) raler(0, "realloc");
+            ret->sock[ret->nlib-1] = -1;
+
             return ret->nlib - 1;
         }
         
@@ -144,12 +157,11 @@ int recherche_librairie(const char* addr,const uint16_t port,const uint8_t type,
     
 }
 
-/*
-void ajouter_livre(char *titre, const int ind, const int ind_lib,
-         struct retour *ret)
+
+void ajouter_livre(char *titre, const int ind_lib, struct retour *ret)
 {
-    ret->ind[ret->current_ind] = ind;
-    ret->titre[ret->current_ind] = titre;
+    // ret->ind[ret->current_ind] = ind;
+    // ret->titre[ret->current_ind] = titre;
 
     if (ret->taille_dg[ind_lib] == 0)   // on n'a pas encore commencé à écrire le dg
     {
@@ -165,6 +177,7 @@ void ajouter_livre(char *titre, const int ind, const int ind_lib,
     }
     else
     {
+        int old_ind = ret->taille_dg[ind_lib];
         ret->datagrammes[ind_lib] = realloc(ret->datagrammes[ind_lib],
                 ret->taille_dg[ind_lib] + TITRE_S);
         if (ret->datagrammes[ind_lib] == NULL)
@@ -174,157 +187,91 @@ void ajouter_livre(char *titre, const int ind, const int ind_lib,
         uint16_t old_nb_liv = ntohs(*(uint16_t *) ret->datagrammes[ind_lib]);
         *(uint16_t *) ret->datagrammes[ind_lib] = htons(old_nb_liv + 1);
 
-        int ind_tmp = (ret->taille_dg[ind_lib] - 2) / TITRE_S;
-        strncpy(&ret->datagrammes[ind_lib][ind_tmp], titre, TITRE_S);
+        // int ind_tmp = (ret->taille_dg[ind_lib] - 2) / TITRE_S;
+        strncpy(&ret->datagrammes[ind_lib][old_ind], titre, TITRE_S);
 
         ret->taille_dg[ind_lib] += TITRE_S;
     }  
-}*/
-
-int rechercher_livre(const char *titre, struct retour *ret)
-{
-    int ind = -1;
-    for (int i=0; i<ret->n; ++i)
-    {
-        if (strncmp(titre, ret->titre[i], TITRE_S) == 0)
-        {
-            ind = i;
-            break;
-        }
-    }
-    return ind;
 }
 
-void envoyer_dg(fd_set *fd, int *max, int so[MAXSOCK], int *nsock,
-        struct retour *ret)
+
+void envoyer_dg(fd_set *fd, int *max, struct retour *ret)
 {
     // on ouvre une socket par librairie
     for (int l=0; l<ret->nlib; ++l)
     {
-        int af, r;
-        char padr[INET6_ADDRSTRLEN], port[6];
-        snprintf(port, 6, "%d", ret->port[l]);
-        switch (ret->type[l])
+        if (ret->datagrammes[l] != NULL)
         {
-        case IPv4:
-            af = AF_INET;
-            break;
-        case IPv6:
-            af = AF_INET6;
-            break;
-        default:
-            printf("Normalement, ce message n'apparait pas ! type=%d\n", af);
-            break;
-        }
-        inet_ntop(af, ret->Ip[l], padr, sizeof(padr));
-
-        struct addrinfo hints, *res, *res0;
-        memset(&hints, 0, sizeof hints);
-        hints.ai_family = PF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM;
-
-        r = getaddrinfo(padr, port, &hints, &res0);
-        if (r != 0) raler(0, "getaddrinfo: %s\n", gai_strerror(r));
-
-        int s = -1;
-        char *cause;
-        for (res = res0; res != NULL; res = res->ai_next)
-        {
-            s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-            if (s == -1) cause = "socket";
-            else
+            // printf("librairie %d\n", l);
+            int af, r;
+            char padr[INET6_ADDRSTRLEN], port[6];
+            snprintf(port, 6, "%d", ret->port[l]);
+            switch (ret->type[l])
             {
-                r = connect(s, res->ai_addr, res->ai_addrlen);
-                if (r == -1)
-                {
-                    cause = "connect";
-                    raler(1, "coooepff");
-                    close(s);
-                    s = -1;
-                }
-                else break;
+            case IPv4:
+                af = AF_INET;
+                break;
+            case IPv6:
+                af = AF_INET6;
+                break;
+            default:
+                printf("Normalement, ce message n'apparait pas ! type=%d\n", ret->type[l]);
+                break;
             }
-            
-        }
-        if (s == -1) raler(0, "Erreur : %s", cause);
-        freeaddrinfo(res0);
+            inet_ntop(af, ret->Ip[l], padr, sizeof(padr));
 
+            struct addrinfo hints, *res, *res0;
+            memset(&hints, 0, sizeof hints);
+            hints.ai_family = PF_UNSPEC;
+            hints.ai_socktype = SOCK_STREAM;
 
-#if 0
-        struct sockaddr_storage ladr;
-        memset(&ladr, 0, sizeof(ladr));
-        struct sockaddr_in *ladr4 = (struct sockaddr_in *)&ladr;
-        struct sockaddr_in6 *ladr6 = (struct sockaddr_in6 *)&ladr;
-        int s, family, r, err;
-        socklen_t llong;
-        printf("%d\n", ret->type[l]);
-        switch (ret->type[l])
-        {
-        case IPv4:
-            memcpy(&ladr4->sin_addr, ret->Ip[l], IPv4LEN);
-            family = AF_INET;
-            ladr4->sin_family = AF_INET;
-            ladr4->sin_port = ret->port[l];
-            llong = sizeof(*ladr4);
-            break;
-        case IPv6:
-            memcpy(&ladr6->sin6_addr, ret->Ip[l], IPv6LEN);
-            family = AF_INET6;
-            ladr6->sin6_family = AF_INET6;
-            ladr6->sin6_port = ret->port[l];
-            llong = sizeof(*ladr6);
-            break;
-        default:
-            printf("Normalement, ce message n'apparait pas !\n");
-            exit(1);
-            break;
-        }
-        printf("llong = %d\n", llong);
-        char *ip = inet_ntoa(ladr4->sin_addr);
-        struct sockaddr *lll = (struct sockaddr *) &ladr;
+            // printf("getaddrinfo vers %s/%s\n", padr, port);
 
+            r = getaddrinfo(padr, port, &hints, &res0);
+            if (r != 0) raler(0, "getaddrinfo: %s\n", gai_strerror(r));
 
+            int s = -1;
+            char *cause;
+            for (res = res0; res != NULL; res = res->ai_next)
+            {
+                s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+                if (s == -1) cause = "socket";
+                else
+                {
+                    r = connect(s, res->ai_addr, res->ai_addrlen);
+                    if (r == -1)
+                    {
+                        cause = "connect";
+                        raler(1, "connect");
+                        close(s);
+                        s = -1;
+                    }
+                    else break;
+                }
+                
+            }
+            if (s == -1) raler(0, "Erreur : %s", cause);
+            freeaddrinfo(res0);
 
-        char *ssss = NULL;
-switch(lll->sa_family) {
-    case AF_INET: {
-        struct sockaddr_in *addr_in = (struct sockaddr_in *)lll;
-        ssss = malloc(INET_ADDRSTRLEN);
-        inet_ntop(AF_INET, &(addr_in->sin_addr), ssss, INET_ADDRSTRLEN);
-        break;
-    }
-    case AF_INET6: {
-        struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *)lll;
-        ssss = malloc(INET6_ADDRSTRLEN);
-        inet_ntop(AF_INET6, &(addr_in6->sin6_addr), ssss, INET6_ADDRSTRLEN);
-        break;
-    }
-    default:
-        break;
-}
-printf("IP address: %s\n", ssss);
-
-        printf("\n>>> %s; %d\n", ip, ladr4->sin_port);
-        CHK(s = socket(family, SOCK_STREAM, 0));
-        r = connect(s, (struct sockaddr *) &ladr, llong);
-        if (r == -1)
-        {
-            CHK(close(s));
-            raler(1, "connect");
-        }
+#ifdef DISPLAY
+            printf("Commande à la librairie %d : ", l);
+            for (int i=0; i<ret->taille_dg[l]; ++i)
+                printf("%d ", ret->datagrammes[l][i]);
+            printf("\n");
 #endif
+            r = write(s, ret->datagrammes[l], ret->taille_dg[l]);
+            if (r == -1)
+                raler(1, "write");
+            free(ret->datagrammes[l]);
+            ret->datagrammes[l] = NULL;
+            
 
-        printf("Commande à la librairie %d\n", l);
-        r = write(s, ret->datagrammes[l], ret->taille_dg[l]);
-        if (r == -1)
-            raler(1, "write");
-        free(ret->datagrammes[l]);
-        *nsock = *nsock + 1;
+            FD_SET(s, fd);
+            if (s > *max)
+                *max = s;
 
-        FD_SET(s, fd);
-        if (s > *max)
-            *max = s;
-
-        so[l] = s;    
+            ret->sock[l] = s;
+            printf("%d à l'envoi sur %d\n", l, ret->sock[l]);
+        }
     }
 }

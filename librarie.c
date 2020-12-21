@@ -60,7 +60,7 @@ void traiter_commande(int s, struct stock *lib)
             break ;
     }
     inet_ntop(af, nadr, padr, sizeof padr);
-    printf ("%s: nb d'octets lus = %d\n", padr, r);
+    printf ("De nil %s: nb d'octets lus = %d\n", padr, r);
 
     u_int32_t no_commande = *(u_int32_t *) buf;
     u_int16_t nb_livre = ntohs(*(u_int16_t *) &buf[4]);
@@ -79,7 +79,6 @@ void traiter_commande(int s, struct stock *lib)
 
     for (int i=0; i<nb_livre; ++i)
     {
-        printf(">> indice : %d\n", ind);
         char titre[TITRE_S + 1];
         memcpy(titre, &buf[6 + i * TITRE_S], TITRE_S);
         titre[TITRE_S] = '\0';  // pour être sûr que ça se termine par \0
@@ -152,6 +151,7 @@ void traiter_reservation(int s, struct stock *lib)
     }
 
     CHK(r = write(s, dg_send, taille_dg));
+    printf("Confirmation client envoyée\n");
     afficher_stock(lib);
 }
 
@@ -166,12 +166,20 @@ int main(int argc, char *argv[])
     struct stock lib;
     init_stock(nb_livres, &argv[2], &lib);
 
+    uint16_t port_lib = atoi(argv[1]);
+
 
     // ouverture du serveur TCP, en attente des envois des clients
     int s[MAXSOCK], nsock, nsock_tcp, r, sd, opt = 1;
-    struct addrinfo hints, *res, *res0 ;
+    // struct sockaddr_in6 monadr, sonadr ;
+    // socklen_t salong ;
+    // int val = 0;
+    // char padr [INET6_ADDRSTRLEN] ;
+    struct addrinfo hints, *res, *res0;
     char *cause;
     char *serv = argv[1];
+
+    (void) port_lib;
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = PF_UNSPEC;
@@ -208,8 +216,30 @@ int main(int argc, char *argv[])
     }
     if (nsock == 0) raler_log(cause);
     freeaddrinfo(res0);
+/*
+    nsock = 0;
+    s[0] = socket(PF_INET6, SOCK_STREAM, 0);
+    if (s[0] == -1) raler(1, "socket");
+    nsock++;
+
+    printf("TCP : %d\n", s[0]);*/
 
     nsock_tcp = nsock;
+/*
+    r = setsockopt(s[0], IPPROTO_IPV6, IPV6_V6ONLY, &val, sizeof val);
+    setsockopt(s[nsock], SOL_SOCKET, SO_REUSEADDR, &val, sizeof val);
+    if (r == -1) raler(1, "setsockopt");
+
+    memset(&monadr, 0, sizeof monadr);
+    monadr.sin6_family = AF_INET6;
+    monadr.sin6_port = htons(port_lib);
+    monadr.sin6_addr = in6addr_any;
+
+    r = bind(s[0], (struct sockaddr *) &monadr, sizeof monadr);
+    if (r == -1) raler(1, "bind");
+
+    r = listen(s[0], 5);
+    if (r == -1) raler(1, "listen");*/
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = PF_UNSPEC ;
@@ -270,7 +300,7 @@ int main(int argc, char *argv[])
             if (FD_ISSET(s[i], &readfds))
                 traiter_commande(s[i], &lib);
         }
-        for (i = 0; i < nsock; ++i)
+        for (i = 0; i < nsock_tcp; ++i)
         {
             struct sockaddr_storage sonadr;
             socklen_t salong;
@@ -282,6 +312,8 @@ int main(int argc, char *argv[])
             {
                 salong = sizeof sonadr;
                 sd = accept(s[i], (struct sockaddr *) &sonadr, &salong);
+                printf("sd : %d\n", sd);
+                if (sd == -1) raler(1, "accept");
 
                 family = ((struct sockaddr *) &sonadr)->sa_family ;
 
@@ -298,14 +330,9 @@ int main(int argc, char *argv[])
                     port = htons(*no_port);
                     break;
                 }
-                // char *nadr_ = nadr;
-                // uint16_t port = htons(*no_port);
-                printf("%d\n", port);
                 inet_ntop(family, nadr, padr, sizeof padr);
                 printf("Done\n");
-                printf("Commande de %s/\n", padr);
-                (void) no_port;
-                // printf("Commande de %s/%d\n", padr, *no_port);
+                printf("Commande de %s/%d\n", padr, port);
                 
                 traiter_reservation(sd, &lib);
             }
