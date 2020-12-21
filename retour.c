@@ -144,6 +144,7 @@ int recherche_librairie(const char* addr,const uint16_t port,const uint8_t type,
     
 }
 
+/*
 void ajouter_livre(char *titre, const int ind, const int ind_lib,
          struct retour *ret)
 {
@@ -177,9 +178,8 @@ void ajouter_livre(char *titre, const int ind, const int ind_lib,
         strncpy(&ret->datagrammes[ind_lib][ind_tmp], titre, TITRE_S);
 
         ret->taille_dg[ind_lib] += TITRE_S;
-    }
-    
-}
+    }  
+}*/
 
 int rechercher_livre(const char *titre, struct retour *ret)
 {

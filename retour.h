@@ -42,13 +42,14 @@ void disp(const struct retour *);
 void free_retour(struct retour *ret);
 
 /**
- * @brief Renvoie l'indice correspondant à l'addresse fournie.
+ * @brief Renvoie l'indice de la librairie correspondant à l'addresse fournie.
  *      si celle-ci n'existe pas encore, elle est ajoutée
  * 
  * @param addr addresse Ip (v4 ou v6)
  * @param port numéro de port
  * @param type type de l'ip (4 ou 6)
  * @param ret adresse du "retour"
+ * @return indice correspondant
  */
 int recherche_librairie(const char* addr,const uint16_t port,const uint8_t type,
         struct retour *ret);

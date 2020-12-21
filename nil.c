@@ -119,10 +119,12 @@ void traiter_retour(int s, struct commande *cm)
             break;
         }
         // enfin le port TCP de la librairie
-        
         *(uint16_t *) &dg[ind + TITRE_S + 1 + IP_S] = *no_port;
+        
         // printf("%d %d", dg[ind + TITRE_S + 16 + 1], dg[ind + TI]);
         ind += REPONSE_S;
+
+        printf(">>>>>>> PORT DE LA LIB :%d", ntohs(dg[ind + TITRE_S + 1 + IP_S]));
         
     }
     // même si on a 0 livre dans le retour, il faut mettre à jour la commande
@@ -354,7 +356,7 @@ void demon(char *serv, const struct annuaire an)
     printf("Au début :\n");
     CMD_DISP(&cm);
     printf("\n");
-    struct timeval attente = {0, 500000};   // 0.5 sec d'attente pour le select
+    struct timeval attente;// = {1., 0};   // 0.5 sec d'attente pour le select
     // attente d'une connexion d'un client
     for (;;)
     {
@@ -376,6 +378,8 @@ void demon(char *serv, const struct annuaire an)
                 max = s[i];
         }
 
+        attente.tv_sec = 1;
+        attente.tv_usec = 0;
         if (select(max+1, &readfds, NULL, NULL, &attente) == -1)
             raler_log("select");
 
@@ -415,6 +419,7 @@ void demon(char *serv, const struct annuaire an)
         }
 
         // on regarde si un délai des commandes est arrivé à expiration
+        printf("Il est %ld\n", time(NULL));
         tester_delai(&cm);
     }
 }

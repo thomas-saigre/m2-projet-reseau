@@ -60,14 +60,18 @@ void nouvelle_commande(const uint32_t no_commande, const int desc,
         const time_t date_envoi, struct commande *cm)
 {
     printf("\n\nInitialisation d'une commande nouvelle %d\n", no_commande);
+    printf("\tExpiration à %ld\n", date_envoi);
     int ind = 0;
     while (ind < CLIENT_MAX && cm->used[ind] != 0)
         ind++;
     if (ind == CLIENT_MAX)
         raler(0, "Trop de commandes simultanées");
+    cm->used[ind] = 1;
     cm->references[ind] = no_commande;
     cm->desc[ind] = desc;
     cm->date_send[ind] = date_envoi;
+    cm->taille_dg[ind] = 0;
+    cm->recus[ind] = 0;
     // on ne change pas le reste pour éviter de faire une copie
 }
 
@@ -85,7 +89,7 @@ void ajouter_commande(const uint32_t no_commande, const int nb_livres_new,
     if (ind == CLIENT_MAX)
         raler(0, "Erreur inexplicable dans CMD_ADD");
 
-    if (cm->used[ind] != 0) // si on a déjà commencé à remplir le datagramme
+    if (cm->taille_dg[ind] != 0) // si on a déjà commencé à remplir le datagramme
     {
         printf("Déjà commencée %p\n", cm->datagrammes[ind]);
         int len_old = cm->taille_dg[ind];
@@ -122,7 +126,6 @@ void ajouter_commande(const uint32_t no_commande, const int nb_livres_new,
         printf("Nouvelle commande\n");
         cm->references[ind] = no_commande;
         cm->taille_dg[ind] = len;
-        cm->used[ind] = 1;
         cm->datagrammes[ind] = dg;
         cm->recus[ind] = 1;
         printf("TAILLE %d\n", cm->taille_dg[ind]);
@@ -144,6 +147,11 @@ void tester_delai(struct commande *cm)
         if (cm->used[i] != 0 && cm->date_send[i] < tps)
         {
             printf("Délai pour %d écoulé\n", cm->references[i]);
+            if (cm->taille_dg[i] == 0)  // si on n'a reçu aucune réponse, le gd n'existe pas encore
+            {
+                cm->datagrammes[i] = calloc(2, sizeof(char));
+                cm->taille_dg[i] = 2;
+            }
             envoyer_reponse(i, cm);
         }
     }
