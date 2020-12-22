@@ -152,7 +152,7 @@ void gerer_requete(const char *serveur, const char *port_nil,
     err = read(s, buf_rep, MAXLEN);
     if (err == -1) raler(1, "read");
 
-    printf("Réponse reçue, nb octets lus %d\n", err);
+    printf("Réponse reçue\n\n");
 
     // fermeture de la connexion
     close(s);

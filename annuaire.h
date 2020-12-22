@@ -5,10 +5,10 @@
 
 struct annuaire
 {
-    int nlib;
-    char **librairies;
-    int *ports;
-    int *sock;
+    int nlib;               // nombre le librairies
+    char **librairies;      // adresses Ip des librairies (en char *)
+    int *ports;             // port des librairies
+    int *sock;              // socket UDP pour communiquer avec
 };
 
 /**

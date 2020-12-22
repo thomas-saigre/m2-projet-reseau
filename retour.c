@@ -21,7 +21,6 @@
 void init_retour(const int n, struct retour *ret)
 {
     ret->n = n;
-    ret->current_ind = 0;
     ret->nlib = INIT_LIB;
 
     ret->datagrammes = malloc(INIT_LIB * sizeof(char *));

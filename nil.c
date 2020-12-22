@@ -51,7 +51,7 @@ void raler_log (char *msg)
  */
 void traiter_retour(int s, struct commande *cm)
 {
-    printf("Retour commande\n");
+    printf("Retour commande");
     struct sockaddr_storage sonadr ;
     socklen_t salong ;
     int r, af ;
@@ -93,7 +93,7 @@ void traiter_retour(int s, struct commande *cm)
     // int o;
 
     inet_ntop(af, nadr, padr, sizeof padr);
-    printf ("\t> %s\n", padr);
+    printf ("\t%s\n", padr);
 
     for (int i=0; i<nb_livres; ++i)
     {
@@ -284,7 +284,7 @@ void demon(char *serv, const struct annuaire an)
             }
         }
     }
-    if (nsock_tcp == 0) raler_log(cause);
+    if (nsock_tcp == 0) raler(1, cause);
     freeaddrinfo(res0);
 
     // ouverture des sockets UDP
@@ -430,6 +430,7 @@ void demon(char *serv, const struct annuaire an)
         // on regarde si un délai des commandes est arrivé à expiration
         tester_delai(&cm);
     }   // for (;;)
+    free_commande(&cm);
 }
 
 

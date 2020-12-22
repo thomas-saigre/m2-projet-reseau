@@ -3,9 +3,9 @@
 
 struct stock
 {
-    int n;
-    char *livres;
-    int *disp;
+    int n;              // nombre de livres
+    char *livres;       // titres des livres
+    int *disp;          // disponiblilités
 };
 
 /**

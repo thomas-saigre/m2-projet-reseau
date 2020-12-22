@@ -6,14 +6,12 @@
 #include <sys/select.h>
 
 #define IP_S       16
-#define INIT_LIB   2
+#define INIT_LIB   8
 #define TITRE_S    10
-#define MAXSOCK    64
 
 struct retour
 {
     int n;              // nombre maximal de livres
-    int current_ind;    // indice courant
     int nlib;           // nombre de librairies
     
     char **datagrammes; // datagrammes à envoyer aux libraries

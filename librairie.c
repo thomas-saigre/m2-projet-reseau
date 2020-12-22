@@ -222,7 +222,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-    if (nsock == 0) raler_log(cause);
+    if (nsock == 0) raler(1, cause);
     freeaddrinfo(res0);
 
     nsock_tcp = nsock;
@@ -276,7 +276,7 @@ int main(int argc, char *argv[])
         }
 
         if (select(max+1, &readfds, NULL, NULL, NULL) == -1)
-            raler(0, "select");
+            raler(1, "select");
 
         for (i = nsock_tcp; i < nsock; ++i)
         {
