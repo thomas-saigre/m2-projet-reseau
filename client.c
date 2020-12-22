@@ -153,7 +153,6 @@ void gerer_requete(const char *serveur, const char *port_nil,
     if (err == -1) raler(1, "read");
 
     printf("Réponse reçue, nb octets lus %d\n", err);
-    printf("\t%s\n", buf_rep);
 
     // fermeture de la connexion
     close(s);
@@ -161,6 +160,12 @@ void gerer_requete(const char *serveur, const char *port_nil,
 
 // Client <-> librairies
     uint16_t max_livre = ntohs(*(u_int16_t *) buf_rep);
+
+    if (max_livre == (uint16_t) -1)
+    {
+        printf("Serveur indisponible, reesayer plus tard\n");
+        exit(0);
+    }
 
 #ifdef DISPLAY
     // on affiche le dg recu
@@ -315,9 +320,8 @@ void gerer_requete(const char *serveur, const char *port_nil,
                 printf("\n");
 #endif
 
-
-
                 uint16_t nb_ret = ntohs(*(uint16_t *) rep_lib);
+
                 uint8_t rep;
                 ind = 2;
 

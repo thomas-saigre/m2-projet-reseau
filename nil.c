@@ -12,6 +12,7 @@
 #include "annuaire.h"
 #include "commande.h"
 #include <sys/time.h>
+#include <signal.h>
 
 
 #define TITRE_S         10
@@ -340,7 +341,7 @@ void demon(char *serv, const struct annuaire an)
     struct commande cm;
     init_commande(an.nlib, &cm);
     struct timeval attente;
-    int af;
+    int af, nv;
     void *nadr;
     char padr[INET6_ADDRSTRLEN];
     uint16_t *no_port;
@@ -399,18 +400,21 @@ void demon(char *serv, const struct annuaire an)
                 uint16_t port = ntohs(*no_port);
 
                 printf("Requete %d de %s/%d pour ", no_commande, padr, port);
-                nouvelle_commande(no_commande, sd, time(NULL) + delai, &cm);
+                nv = nouvelle_commande(no_commande, sd, time(NULL)+delai, &cm);
 #ifdef DISPLAY
                 afficher_commande(&cm);
 #endif
 
                 char *dg = NULL;
                 int taille_dg;
-                taille_dg = traiter_requete_client(sd, no_commande, &dg);
-                printf("\n");
+                if (nv == 0)
+                {
+                    taille_dg = traiter_requete_client(sd, no_commande, &dg);
+                    printf("\n");
 
-                broadcast_lib(an, dg, taille_dg);
-                free(dg);
+                    broadcast_lib(an, dg, taille_dg);
+                    free(dg);
+                }
             }
         }
 
@@ -425,7 +429,7 @@ void demon(char *serv, const struct annuaire an)
 
         // on regarde si un délai des commandes est arrivé à expiration
         tester_delai(&cm);
-    }
+    }   // for (;;)
 }
 
 
@@ -442,6 +446,7 @@ int main(int argc, char *argv[])
         printf("mauvais nombre d'arguments\n");
         usage(argv[0]);
     }
+
     int nlib = narg / 2;
     struct annuaire an;
     init_annuaire(nlib, &argv[3], &an);

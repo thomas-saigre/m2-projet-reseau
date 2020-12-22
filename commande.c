@@ -57,14 +57,28 @@ void afficher_commande(const struct commande *cm)
     printf("\n");
 }
 
-void nouvelle_commande(const uint32_t no_commande, const int desc,
+void reponse_erreur(const int desc)
+{
+    printf("Trop de commandes simultanées, envoi dg -1\n");
+    char dg[2];
+    memset(dg, -1, 2*sizeof(char));
+    int r = write(desc, dg, 2);
+    if (r == -1) raler(1, "write");
+
+    CHK(close(desc));    
+}
+
+int nouvelle_commande(const uint32_t no_commande, const int desc,
         const time_t date_envoi, struct commande *cm)
 {
     int ind = 0;
     while (ind < CLIENT_MAX && cm->used[ind] != 0)
         ind++;
     if (ind == CLIENT_MAX)
-        raler(0, "Trop de commandes simultanées");
+    {
+        reponse_erreur(desc);
+        return -1;
+    }
     cm->used[ind] = 1;
     cm->references[ind] = no_commande;
     cm->desc[ind] = desc;
@@ -72,6 +86,7 @@ void nouvelle_commande(const uint32_t no_commande, const int desc,
     cm->taille_dg[ind] = 0;
     cm->recus[ind] = 0;
     // on ne change pas le reste pour éviter de faire une copie
+    return 0;
 }
 
 // avant d'utiliser cette fonction, utiliser nouvelle_commande pour initialiser
@@ -85,7 +100,7 @@ void ajouter_commande(const uint32_t no_commande, const int nb_livres_new,
     }
 
     if (ind == CLIENT_MAX)
-        raler(0, "Erreur inexplicable dans CMD_ADD");
+        raler(0, "Erreur inexplicable dans ajouter_commande");
 
     if (cm->taille_dg[ind] != 0) //si on a déjà commencé à remplir le datagramme
     {
@@ -93,6 +108,7 @@ void ajouter_commande(const uint32_t no_commande, const int nb_livres_new,
         int new_len = len_old + len - 2;
         if (new_len > MAXLEN)
             raler(0, "Trop de réponse, datagramme trop petit :/");
+
         uint16_t nb_livres = ntohs(*(uint16_t *) cm->datagrammes[ind]);
 
         cm->datagrammes[ind] = realloc(cm->datagrammes[ind], new_len);

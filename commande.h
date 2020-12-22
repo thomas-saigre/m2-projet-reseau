@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <time.h>
 #define MAXLEN      1024
-#define CLIENT_MAX  32 
+#define CLIENT_MAX  32
 
 
 struct commande
@@ -36,8 +36,9 @@ void afficher_commande(const struct commande *cm);
  * @param desc descripteur de sortie pour le client
  * @param date_envoi date où le délai est dépassé
  * @param cm addresse de la base de données de commandes
+ * @return 0 si tout s'est bien passé, -1 si CLIENT_MAX est atteint
  */
-void nouvelle_commande(const uint32_t no_commande, const int desc,
+int nouvelle_commande(const uint32_t no_commande, const int desc,
             const time_t date_envoi, struct commande *cm);
 
 /**
