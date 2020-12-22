@@ -12,15 +12,18 @@ all: $(EXEC)
 debug: DEBUG += -g
 debug: all
 
+coverage: DEBUG += -g -coverage
+coverage: all
+
 
 librairie: librairie.o stock.o raler.o
-	$(CC) librairie.o stock.o raler.o -o librairie
+	$(CC) librairie.o stock.o raler.o -o librairie $(DEBUG)
 
 nil: nil.o raler.o annuaire.o commande.o
-	$(CC) nil.o raler.o annuaire.o commande.o -o nil
+	$(CC) nil.o raler.o annuaire.o commande.o -o nil $(DEBUG)
 
 client: client.o raler.o retour.o
-	$(CC) client.o raler.o retour.o -o client
+	$(CC) client.o raler.o retour.o -o client $(DEBUG)
 
 
 

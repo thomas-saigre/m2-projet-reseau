@@ -6,7 +6,7 @@
 #include <sys/select.h>
 
 #define IP_S       16
-#define INIT_LIB   8
+#define INIT_LIB   2
 #define TITRE_S    10
 #define MAXSOCK    64
 

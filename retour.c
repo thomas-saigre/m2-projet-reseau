@@ -56,7 +56,6 @@ void init_retour(const int n, struct retour *ret)
 
 void free_retour(struct retour *ret)
 {
-    // on libère la mémoire des datagrammes au moment de l'envoi
     for (int i = 0; i < ret->nlib; ++i)
         free(ret->datagrammes[i]);
     free(ret->datagrammes);
@@ -112,26 +111,29 @@ int recherche_librairie(const char* addr,const uint16_t port,const uint8_t type,
                     ret->nlib * sizeof(char *));
             if (ret->datagrammes == NULL) raler(0, "realloc");
             ret->datagrammes[ret->nlib-1] = calloc(MAXLEN, sizeof(char));
+            if (ret->datagrammes[ret->nlib-1] == NULL) raler(0, "calloc");
 
-            ret->Ip = realloc(ret->Ip, ret->nlib * sizeof(char *));
-            if (ret->Ip == NULL) raler(0, "realloc");
-            memcpy(ret->Ip[ret->nlib-1], addr, IP_S);
+            ret->taille_dg = realloc(ret->taille_dg, ret->nlib*sizeof(int));
+            if (ret->taille_dg == NULL) raler(0, "realloc");
+            ret->taille_dg[ret->nlib-1] = 0;
 
-            ret->port = realloc(ret->port, ret->nlib * sizeof(uint16_t));
-            if (ret->port == NULL) raler(0, "realloc");
-
-            ret->port[ret->nlib-1] = port;
-            
             ret->type = realloc(ret->type, ret->nlib * sizeof(uint8_t));
             if (ret->type == NULL) raler(0, "realloc");
             ret->type[ret->nlib-1] = type;
 
+            ret->port = realloc(ret->port, ret->nlib * sizeof(uint16_t));
+            if (ret->port == NULL) raler(0, "realloc");
+            ret->port[ret->nlib-1] = port;
+
+            ret->Ip = realloc(ret->Ip, ret->nlib * sizeof(char *));
+            if (ret->Ip == NULL) raler(0, "realloc");
+            ret->Ip[ret->nlib-1] = malloc(IP_S * sizeof(char));
+            memcpy(ret->Ip[ret->nlib-1], addr, IP_S);
+
             return ret->nlib - 1;
-        }
-        
-    }
-    
-}
+        }   // if is_libre
+    }   // if ind < nlib
+}   // fonction rechercher librairie
 
 
 void ajouter_livre(char *titre, const int ind_lib, struct retour *ret)
