@@ -1,7 +1,7 @@
 enonce.pdf
 *.o
 client
-librarie
+librairie
 nil
 .vscode*
 *.aux
@@ -10,4 +10,5 @@ nil
 *.fdb_latexmk
 *.out
 *.gz
+*bak
 rapport.pdf

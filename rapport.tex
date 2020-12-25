@@ -1,0 +1,326 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amsthm,amsfonts,amssymb}
+\usepackage{fancyhdr}
+\usepackage{stmaryrd}
+\usepackage{graphicx}
+\usepackage{subfigure}
+\usepackage{multicol}
+\usepackage{enumitem}
+
+\setitemize{label=$\bullet$}
+
+
+\usepackage{hyperref}
+\hypersetup{%
+	pdftitle={Projet de réseau},
+	pdfauthor={Thomas Saigre},
+	pdfsubject={Projet de réseau},
+}
+
+\usepackage[left=1cm,right=1cm,top=2cm,bottom=2cm]{geometry}
+
+\usepackage{pgf,tikz}
+\usepackage{listings}
+\definecolor{yqyqyq}{rgb}{0.5019607843137255,0.5019607843137255,0.5019607843137255}
+\lstset{%
+	language={c},
+	literate = {é}{{\'e}}1 {è}{{\`e}}1 {à}{{\`a}}1,
+	breaklines=true,
+	% numbers=left,
+	numberstyle=\footnotesize,
+	frame =lines,
+	captionpos=b,
+	basicstyle=\ttfamily,
+	keywordstyle=\bfseries\color{blue},
+	commentstyle=\itshape\color{yqyqyq}
+	}
+
+\usepackage[ruled,french]{algorithm2e}
+
+\renewcommand{\ss}{\vspace{\baselineskip}}
+
+\pagestyle{fancy}
+\fancyhead[L]{{\sf Thomas Saigre}}
+\fancyhead[R]{{\sf Projet de réseau}}
+\fancyfoot[C]{\thepage} 
+
+
+\begin{document}
+
+\thispagestyle{plain}
+
+
+
+
+\begin{center}
+
+\begin{Large}
+\textbf{\textsf{Aidez les libraires !}}\\
+\textsf{Projet de réseau}
+\end{Large}\\
+\begin{large}
+    \textsf{Master 2 -- CSMI}\\
+    \textsf{10 janvier 2021}
+\end{large}
+
+\vspace{1.5\baselineskip}
+{\sf Thomas Saigre}
+
+
+\vspace{1.5\baselineskip}
+\hrule
+
+\end{center}
+
+
+
+
+
+\begin{multicols}{2}
+
+\section{Transmission de l'information}
+
+On rappelle brièvement ici le déroulé des étapes entre le moment où un client commande, jusqu'à qu'il ait reçu toutes les réponses.
+
+\begin{enumerate}
+	\item Demande des livres du client vers le serveur Nil, en connexion TCP,
+	\item Diffusion de la requête du client de la part de Nil à toutes les librairies en mode non connecté (UDP),
+	\item Réponses éventuelles des librairies,
+	\item Réponse du serveur au client,
+	\item Commande du client aux librairies concernées,
+	\item Réponses des librairies (si des réponses sont négatives, retour à l'étape précédente)
+\end{enumerate}
+
+
+
+\section{Description des programmes}
+
+\begin{list}{$\bullet$}{}
+	\item \texttt{./nil port délai addr1 port1 addr2 port2} pour lancer le serveur Nil. \texttt{port} est le port sur lequel Nil pourra être trouvé, \texttt{delai} est le temps maximal (en secondes) qu'ont les librairies pour répondre à la requête, et les couples \texttt{addri}, \texttt{porti} sont les \og coordonnées \fg{} de chaque librairie.
+	\item \texttt{./librairie port livre1 livre2 ...} pour simuler une libraires. \texttt{port} est le port sur lequel on peut trouver la librairies, et les arguments suivants sont tous les livres présents initialement dans le stock de la librairie.
+	\item \texttt{./client serveur port livre1 livre2 ...} pour effectuer un commande. \texttt{serveur}, \texttt{port} est l'adresse et le port du serveur Nil, puis les paramètres suivants sont les ouvrages que l'on veut commander.
+\end{list}
+
+
+Ces programmes utilisent des structures différentes (\texttt{annuaire}, \texttt{stock}, \texttt{commande}, \texttt{retour}) qui seront décrites ci-dessous. Toutes les fonctions implémentées ne seront pas décrites dans ce document, mais une documentation du type \emph{doxygen} est faite pour chaque déclaration.
+
+
+
+\section{Nil}
+
+C'est le programme central du projet. Il commence par se préparer aux réceptions, qui peuvent venir à la fois des clients et des librairies. Il commence donc par ouvrir plusieurs sockets en mode connecté ou non pour pouvoir recevoir les datagrammes dans les deux cas. Ces sockets sont stockées dans un tableau \texttt{s} de taille \texttt{MAXSOCK}, dont les premières cases contiennent les sockets connectées et les suivantes les sockets UDP :
+
+\begin{center}
+	\begin{tikzpicture}
+	\draw (0,0) -- (4,0) -- (4,.5) -- (0,.5) -- cycle;
+	\foreach \x in {1,2,3} \draw (\x,0) -- (\x,.5);
+	\draw[line width=2pt] (2,0) -- (2,.5);
+	\draw (0.5,0.25) node{\texttt{tcp0}};
+	\draw (1.5,0.25) node{\texttt{tcp1}};
+	\draw (2.5,0.25) node{\texttt{udp0}};
+	\draw (3.5,0.25) node{\texttt{udp1}};
+	\end{tikzpicture}
+\end{center}
+
+Bien sûr, on garde en mémoire le nombre de sockets TCP et UDP pour pouvoir les séparer après le \texttt{select}.
+
+Le programme va utiliser la structure \texttt{commande}, décrite dans le fichier \texttt{commande.h} qui permet de gérer les requêtes qui peuvent éventuellement arriver en même temps. Cette structure contient les champs suivants :
+
+\begin{itemize}
+	\item \texttt{int nlib} le nombre de librairies données en argument à Nil,
+	\item \texttt{uint32\_t references[CLIENT\_MAX]}, qui regroupe le numéro de le commande stockée,
+	\item \texttt{int used[CLIENT\_MAX]}, dont la valeur vaut \texttt{0} si aucune commande n'est en cours sur cette case,
+	\item \texttt{int desc[CLIENT\_MAX]}, qui contient le descripteur de la socket TCP connectée au client qui a effectué la requête,
+	\item \texttt{time\_t date\_send[CLIENT\_MAX]} qui contient la date (en secondes) à laquelle le délai de réponde des librairies sera dépassé,
+	\item \texttt{int recus[CLIENT\_MAX]} compte le nombre de réponses reçues,
+	\item \texttt{char *datagrammes[CLIENT\_MAX]} les datagrammes\linebreak à renvoyer au client. Ces datagrammes ne sont pas alloués à l'initialisation de la structure, mais au moment où il sont remplis par les réponses des librairies. Ainsi, la taille allouée est exactement égale à la taille du datagramme envoyé. La mémoire est libérée juste après que le datagramme ait été envoyé.
+\end{itemize}
+
+
+
+Pour symboliser la puissance maximale du serveur, on se limite à un nombre maximal de client simultané, \texttt{CLIENT\_MAX} (qu'on a pris égal à 32 dans notre cas). Si le nombre de client maximal est atteint, un datagramme vide avec \texttt{-1} comme nombre de livre est envoyé. Ainsi le client sait que quelque chose n'a pas marché et qu'il pourra réessayer plus tard. La limite de cela (qui n'en est pas vraiment une car on dépasserait forcément le buffer dans ce cas) est qu'un client ne pourra jamais recevoir 65535 livres de la part de Nil.
+
+
+\ss
+
+Nil utilise aussi une structure \texttt{annuaire} pour gérer les librairies, décrite dans \texttt{annuaire.h}. Cette structure stocke toutes les informations correspondantes à la librairie, à partir de ce qui a été fournir en argument (le port ainsi que l'adresse IP qui est laissé sous forme d'un \texttt{char *} ici). Cette structure garde aussi en mémoire le descripteur de la socket UDP pour communiquer avec la librairie. En effet, le serveur Nil ouvre une socket non connectée pour chaque librairie. C'est moins économique au niveau calcul, mais cela permet facilement de détecter la librairie émettrice.
+
+
+\ss
+
+Dans le cas d'une requête d'une client, Nil effectue les étapes suivantes :
+\begin{itemize}
+	\item Préparer l'emplacement dans la structure \texttt{commande}. C'est à cette étape que la vérification du nombre de commandes en cours par rapport à \texttt{CLIENT\_MAX}.
+	\item Préparer le datagramme à envoyer aux librairies
+	\item Envoyer ce datagramme
+\end{itemize}
+
+Dans le cas d'une réponse de la librairie, Nil va procéder ainsi :
+\begin{itemize}
+	\item Si c'est la première librairie à répondre pour la commande $i$, le datagramme composé des réponses à envoyer à Nil est simplement mis dans la case correspondante, sans faire de copie ni allouer de mémoire supplémentaire.
+	\item Si la librairie vient compléter une commande déjà commencée, cette fois une ré-allocation de mémoire est faite, toujours en vérifiant que la taille totale ne dépasse pas \texttt{MAXLEN}.
+\end{itemize}
+
+\ss
+
+Pour renvoyer le datagrammes au client deux cas de figures sont possibles :
+\begin{itemize}
+	\item On a reçu la réponse de chaque librairie, le datagramme est alors envoyé à ce moment
+	\item Le délai est écoulé. Pour pouvoir le mesurer, on utilise l'argument \texttt{timeout} de \texttt{select} pour en sortir toutes les secondes. Cela permet de vérifier en parcourant toutes les commandes en cours si le délai est dépassé.
+\end{itemize}
+
+\ss
+\noindent\textbf{\textit{NB :}} certaines fonctions sont assez lourdes dans leurs implémentations, notamment avec beaucoup de boucles pour rechercher des indices. Cela aurait été plus simple avec les bibliothèques standards C++, mais cela n'était pas permis\ldots
+
+
+\section{Client}
+
+C'est le programme qui a le déroulé le plus linéaire : il envoie sa requête à Nil, attend la réponse, puis pour chaque librairie reçue, il envoie la réponse à la librairie et attend la réponse avant de passer à la librairie suivante.
+Pour être sûr d'avoir eu une réponse définitive pour chacun des $n$ livres demandés (qu'elle soit positive ou négative), on utilise un tableau \texttt{recu} de taille $n$, ainsi qu'un compteur \texttt{nb\_reponse} pour connaître le nombre de réponses.
+
+Un petite astuce consiste aussi à garder en mémoire l'indice courant du livre dans le datagramme réponse de nil, car si la réponse de la librairie est négative, il suffit de reparcourir le datagramme à partir de cet indice pour voir si une autre librairie l'a en stock.
+
+\ss
+
+Pour gérer toutes les librairies, le programme utilise une structure \texttt{retour} qui contient toutes les informations concernant les librairies présentes dans le datagramme réponse de Nil : le \texttt{type} de la connexion (4 ou 6), l'adresse \texttt{Ip}, ainsi que le \texttt{port}. Cette structure est décrite dans le fichier \texttt{retour.h}.
+À l'initialisation, 8 cases sont crées, mais si la réponse de Nil contient plus de 8 librairies, de la mémoire supplémentaire est allouée pour gérer cela.
+
+\ss
+
+L'algorithme utilisé pour traiter la réponse des librairies est donc le suivant : tant qu'on na pas eu de réponse définitive pour tous les livres, on parcourt les références que l'on souhaite commander, et s'il est encore disponible dans une librairie on l'ajoute au datagramme à envoyer à cette libraire, sinon c'est qu'il n'est pas disponible. Une fois ce parcourt effectué, on peut envoyer les datagrammes aux librairies et attendre les réponses. Si une réponse est positive pour un livre, on le prend en compte dans le compteur \texttt{nb\_reponse}.
+
+
+
+
+
+\section{Librairie}
+
+Ce programme va ouvrir des sockets en écoute passive pour les deux types de connexion : TCP et UDP. Une fois que cela est fait, il se met en attente via un \texttt{select} (sans délai).
+
+S'il reçoit une requête UDP (qui vient donc de Nil), il va traiter la commande et renvoyer le datagramme avec ses disponibilités. Si c'est un requête TCP (qui vient d'un client), il va traiter les réservation, mettant à jour le status de celles-ci avant d'envoyer la réponse au client.
+
+\ss
+
+Librairie utilise la structure \texttt{stock} pour gérer son stock de livre, décrit dans le fichier \texttt{stock.h}. Celui-ci est initialisé avec les arguments passés au programme, et contient ces champs :
+\begin{itemize}
+	\item \texttt{int n} qui est le nombre de livres en stocks initialement
+	\item \texttt{char *livre} qui contient les titres des livres. Ce tableau est alloué en une fois et est de taille \texttt{TITRE\_S * n} (ici, $\texttt{TITRE\_S}=10$).
+	\item \texttt{int *disp} où chaque case contient la disponibilité du livre : initialement elle vaut 1, mais si l'ouvrage a été commandé, elle vaut 0.
+\end{itemize}
+
+
+
+\section{Compilation et débogguage}
+
+Grâce au Makefile, plusieurs options de compilation sont possibles :
+\begin{itemize}
+	\item \texttt{make} pour simplement construire les programmes
+	\item \texttt{make debug} pour compiler avec les options nécessaires au débogguage
+	\item \texttt{make coverage} pour tester ensuite la couverture du code
+\end{itemize}
+
+Lorsque l'on exécute avec Valgrind, aucune erreur n'est détectée, à part la mémoire allouée dans \texttt{nil} et \texttt{librairie}, car le programme se termine par une interruption, sans que les fonctions pour libérer la mémoire (qui sont implémentées) ne soient appelées.
+
+
+\end{multicols}
+
+
+
+
+
+\newpage
+
+\section{Exemple d'utilisation}
+
+Voici un exemple d'utilisation des trois programmes, avec ce qui est affiché. 
+Dans cet exemple, on a 3 libraires, dont 2 sont effectivement lancées par un programme. C'est pour cela qu'une des trois ne répond pas dans le délai.
+
+Le client souhaite commander l'ouvrage \texttt{a} qui est présent dans le stock des deux librairies. Pas de chance pour la librairie sur le port \texttt{9002} : le client l'a commandé d'abord sur \texttt{9001}.
+
+\begin{multicols*}{2}
+	
+\begin{verbatim}
+$ ./nil 9000 5 ::1 9001 127.0.0.1 9002 \
+          192.168.1.1 9000
+
+Requete 1 de ::1/50120 pour a manuel b 
+> Lib 0 addr ::1 port 9001
+> Lib 1 addr 127.0.0.1 port 9002
+> Lib 2 addr 192.168.1.1 port 9000
+Retour commande ::1
+Retour commande 127.0.0.1
+Délai pour 1 écoulé
+Réponse envoyée au client
+
+^C
+\end{verbatim}
+
+
+
+\begin{verbatim}
+	$ ./client ::1 9000 a manuel b
+	Envoi requête à ::1/9000
+	
+	Attente réponse
+	Réponse reçue
+
+	a commandé sur ::1/9001
+	manuel commandé sur ::1/9001
+	b non disponible
+	
+	Fin
+\end{verbatim}
+
+\vfill\null
+\columnbreak
+
+\begin{verbatim}
+$ ./librairie 9001 manuel a b c
+Stock disponible : manuel a b c 
+
+Requete de nil ::1/52977
+	a disponible
+	manuel disponible
+	b disponible
+Réponse envoyée !
+
+Commande de ::1/49644
+	a : réservé !
+	manuel : réservé !
+		: non disponible
+Confirmation client envoyée
+Stock disponible : b c 	
+
+^C
+\end{verbatim}
+
+
+
+\begin{verbatim}
+$ ./librairie 9002 a a l
+Stock disponible : a a l 
+
+Requete de nil 127.0.0.1/44798
+	a disponible
+	manuel non disponible
+	b non disponible
+Réponse envoyée !
+
+^C
+\end{verbatim}
+
+
+\end{multicols*}
+
+
+
+
+
+
+
+
+
+\end{document}
