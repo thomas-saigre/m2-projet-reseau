@@ -322,6 +322,10 @@ int main(int argc, char *argv[])
         }
     }
 
+    // fermeture des descripteurs
+    for (int so = 0; so < nsock; ++so)
+        CHK( close(s[so]) );
+
     free_stock(&lib);
     
     return 0;

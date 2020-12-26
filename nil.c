@@ -138,49 +138,46 @@ void traiter_retour(int s, struct commande *cm)
  * @param len taille du datagramme
  * @param rep répertoire des commandes
  */
-void broadcast_lib(const struct annuaire an, const char *dg, const int len)
+void broadcast_lib(const struct annuaire *an, const char *dg, const int len)
 {
     // client UDP : envoie aux librairies
-    for (int l=0; l<an.nlib; ++l)
+    for (int l=0; l<an->nlib; ++l)
     {
         // pour l'envoi
         struct sockaddr_storage sadr;
         struct sockaddr_in  *sadr4 = (struct sockaddr_in  *) &sadr;
         struct sockaddr_in6 *sadr6 = (struct sockaddr_in6 *) &sadr;
         socklen_t salong;
-        int r, family, o;
+        int r, o;
 
         // Envoi du datagramme à la librarie l
         memset(&sadr, 0, sizeof sadr);
-        int port = htons(an.ports[l]);
+        int port = htons(an->ports[l]);
 
-        if (inet_pton(AF_INET6, an.librairies[l], &sadr6->sin6_addr) == 1)
+        if (inet_pton(AF_INET6, an->librairies[l], &sadr6->sin6_addr) == 1)
         {
-            family = PF_INET6;
             sadr6->sin6_family = AF_INET6;
             sadr6->sin6_port = port;
             salong = sizeof *sadr6;
         }
-        else if (inet_pton(AF_INET, an.librairies[l], &sadr4->sin_addr) == 1)
+        else if (inet_pton(AF_INET, an->librairies[l], &sadr4->sin_addr) == 1)
         {
-            family = PF_INET;
             sadr4->sin_family = AF_INET;
             sadr4->sin_port = port;
             salong = sizeof *sadr4;
         }
         else
-            raler(0, "adresse '%s' non reconnue\n", an.librairies[l]);
-
-        (void) family;
+            raler(0, "adresse '%s' non reconnue\n", an->librairies[l]);
 
 
 
         o = 1;
-        setsockopt(an.sock[l], SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
+        setsockopt(an->sock[l], SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
         // setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o);
 
-        printf("\t> Lib %d addr %s port %d\n", l, an.librairies[l], an.ports[l]);
-        r = sendto(an.sock[l], dg, len, 0, (struct sockaddr *) &sadr, salong);
+        printf("\t> Lib %d addr %s port %d\n",
+                l, an->librairies[l], an->ports[l]);
+        r = sendto(an->sock[l], dg, len, 0, (struct sockaddr *) &sadr, salong);
         if (r == -1) raler(1, "send to");
 
     }
@@ -243,7 +240,7 @@ int traiter_requete_client(int in, const uint32_t no_commande, char **dg)
  * @param serv
  * @param an annuaire des librairies
  */
-void demon(char *serv, const struct annuaire an)
+void demon(char *serv, struct annuaire *an)
 {
     int s[MAXSOCK], sd, nsock_tcp, r, opt = 1;
     struct addrinfo hints, *res, *res0;
@@ -289,7 +286,7 @@ void demon(char *serv, const struct annuaire an)
 
     // ouverture des sockets UDP
     int nsock = nsock_tcp;
-    for (int l=0; l < an.nlib; ++l)
+    for (int l=0; l < an->nlib; ++l)
     {
         // pour l'envoi
         struct sockaddr_storage sadr;
@@ -300,22 +297,22 @@ void demon(char *serv, const struct annuaire an)
 
         // Envoi du datagramme à la librarie l
         memset(&sadr, 0, sizeof sadr);
-        int port = htons(an.ports[l]);
+        int port = htons(an->ports[l]);
 
-        if (inet_pton(AF_INET6, an.librairies[l], &sadr6->sin6_addr) == 1)
+        if (inet_pton(AF_INET6, an->librairies[l], &sadr6->sin6_addr) == 1)
         {
             family = PF_INET6;
             sadr6->sin6_family = AF_INET6;
             sadr6->sin6_port = port;
         }
-        else if (inet_pton(AF_INET, an.librairies[l], &sadr4->sin_addr) == 1)
+        else if (inet_pton(AF_INET, an->librairies[l], &sadr4->sin_addr) == 1)
         {
             family = PF_INET ;
             sadr4->sin_family = AF_INET;
             sadr4->sin_port = port;
         }
         else
-            raler(0, "adresse '%s' non reconnue\n", an.librairies[l]);
+            raler(0, "adresse '%s' non reconnue\n", an->librairies[l]);
 
         so = socket(family, SOCK_DGRAM, 0);
         if (so == -1)
@@ -326,7 +323,7 @@ void demon(char *serv, const struct annuaire an)
             s[nsock] = so;
             setsockopt(s[nsock], IPPROTO_IPV6, IPV6_V6ONLY, &o, sizeof o);
             nsock++;
-            an.sock[l] = so;
+            an->sock[l] = so;
 
         }
     }
@@ -339,7 +336,7 @@ void demon(char *serv, const struct annuaire an)
 
     uint32_t no_commande = 0;
     struct commande cm;
-    init_commande(an.nlib, &cm);
+    init_commande(an->nlib, &cm);
     struct timeval attente;
     int af, nv;
     void *nadr;
@@ -430,6 +427,14 @@ void demon(char *serv, const struct annuaire an)
         // on regarde si un délai des commandes est arrivé à expiration
         tester_delai(&cm);
     }   // for (;;)
+
+    // fermeture des descripteurs
+    for (int l = 0; l < an->nlib; ++l)
+        CHK( close(an->sock[l]) );
+    
+    for (int so = 0; so < nsock; ++so)
+        CHK( close(s[so]) );
+
     free_commande(&cm);
 }
 
@@ -456,7 +461,7 @@ int main(int argc, char *argv[])
     chdir("/"); // change le répertoire courant
     umask(0);   // initialise le masque binaire
     openlog("exemple", LOG_PID | LOG_CONS, LOG_DAEMON);
-    demon(serv, an);
+    demon(serv, &an);
 
     free_annuaire(&an);
     return 0;
