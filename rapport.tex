@@ -146,7 +146,7 @@ Pour symboliser la puissance maximale du serveur, on se limite à un nombre maxi
 
 \ss
 
-Nil utilise aussi une structure \texttt{annuaire} pour gérer les librairies, décrite dans \texttt{annuaire.h}. Cette structure stocke toutes les informations correspondantes à la librairie, à partir de ce qui a été fournir en argument (le port ainsi que l'adresse IP qui est laissé sous forme d'un \texttt{char *} ici). Cette structure garde aussi en mémoire le descripteur de la socket UDP pour communiquer avec la librairie. En effet, le serveur Nil ouvre une socket non connectée pour chaque librairie. C'est moins économique au niveau calcul, mais cela permet facilement de détecter la librairie émettrice.
+Nil utilise aussi une structure \texttt{annuaire} pour gérer les librairies, décrite dans \texttt{annuaire.h}. Cette structure stocke toutes les informations correspondantes à la librairie, à partir de ce qui a été fournir en argument (le port ainsi que l'adresse IP qui est laissé sous forme d'un \texttt{char *} ici). Cette structure garde aussi en mémoire le descripteur de la socket UDP pour communiquer avec la librairie. En effet, le serveur Nil ouvre une socket non connectée pour chaque librairie. Cette socket sert uniquement à gérer l'envoi des données. Les sockets écoutées dans le \texttt{select} sont uniquement celles ouvertes à l'initialisation du serveur, dont le descripteur est dans le tableau \texttt{s}.
 
 
 \ss

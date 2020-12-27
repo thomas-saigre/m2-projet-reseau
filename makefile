@@ -51,6 +51,9 @@ retour.o: retour.c
 stock.o: stock.c
 	$(CC) stock.c $(CFLAGS) $(DEBUG)
 
+tar:
+	tar -cvf nil_saigre.tar.gz *.c *.h makefile rapport.pdf
+
 
 clean:
 	rm -f *.o $(EXEC)
